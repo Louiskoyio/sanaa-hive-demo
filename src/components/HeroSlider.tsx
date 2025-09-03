@@ -8,10 +8,10 @@ type Slide = {
 };
 
 const slides: Slide[] = [
-  { id: 1, image: "/assets/highlighted-events/highlighted-event-1.jpg", title: "Open Mic Night", details: "Sat, 18 Oct — Groove Lounge" },
-  { id: 2, image: "/assets/highlighted-events/highlighted-event-2.jpg", title: "Art Auction", details: "Fri, 24 Oct — Central Gallery" },
-  { id: 3, image: "/assets/highlighted-events/highlighted-event-3.jpg", title: "Creative Expo", details: "Sun, 02 Nov — Hall A" },
-  { id: 4, image: "/assets/highlighted-events/highlighted-event-4.webp", title: "Street Fashion", details: "Sat, 08 Nov — Plaza" },
+  { id: 1, image: "/assets/highlighted-events/highlighted-event-6.webp", title: "Open Mic Night", details: "Sat, 18 Oct — Groove Lounge" },
+  { id: 2, image: "/assets/highlighted-events/highlighted-event-7.webp", title: "Art Auction", details: "Fri, 24 Oct — Central Gallery" },
+  { id: 3, image: "/assets/highlighted-events/highlighted-event-8.jpg", title: "Creative Expo", details: "Sun, 02 Nov — Hall A" },
+  { id: 4, image: "/assets/highlighted-events/highlighted-event-9.webp", title: "Street Fashion", details: "Sat, 08 Nov — Plaza" },
   { id: 5, image: "/assets/highlighted-events/highlighted-event-5.png", title: "Sanaa Talent Show", details: "Fri, 21 Nov — Riverside" },
 ];
 

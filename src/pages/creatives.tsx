@@ -1,80 +1,72 @@
-// pages/events.tsx
+// pages/creatives.tsx
 import { useMemo, useState } from "react";
 import Page from "@/components/Page";
-import EventCard from "@/components/EventCard";
+import CreativeCard from "@/components/CreativeCard";
 
-type EventItem = {
-  title: string;
-  date: string | Date;
-  venue: string;
-  description: string;
+type CreativeItem = {
+  stageName: string;
+  category: string;
+  verified?: boolean;
+  profileUrl?: string;
+  onView?: () => void;
   image: string;
-  price?: string;
-  ticketUrl?: string;
-  onBuy?: () => void;
-  badge?: string;
-  category?: string; // NEW: used by filter chips
 };
 
-const eventsData: EventItem[] = [
+const creativesData: CreativeItem[] = [
   {
-    title: "Sanaa Talent Search",
-    date: "2025-09-21T16:00:00",
-    venue: "Hazina Trade Center, Nairobi",
-    description:
-      "An evening of art, live sets, and pop-up merch featuring emerging Nairobi creatives. Limited capacity—arrive early!",
-    image: "/assets/highlighted-events/highlighted-event-5.png",
-    price: "Ksh. 1,000",
-    ticketUrl: "https://tickets.example.com/sundown",
-    badge: "New",
-    category: "Showcase", // <—
+    stageName: "Mint Glint Studios",
+    category: "Studio",
+    verified: true,
+    profileUrl: "/creatives/mint-glint-studios",
+    image: "/assets/creatives/mint-glint.png",
   },
   {
-    title: "Maker’s Market",
-    date: new Date(),
-    venue: "The Alchemist, Nairobi",
-    description:
-      "Discover handmade crafts, prints, and apparel by local artists. Family friendly; food trucks on site.",
-    image: "/assets/highlighted-events/highlighted-event-3.jpg",
-    price: "Free Entry",
-    onBuy: () => alert("Handle RSVP / free ticket flow"),
-    badge: "Sold Out",
-    category: "Market", // <—
+    stageName: "Kito Wave",
+    category: "DJ • Afro House",
+    verified: false,
+    profileUrl: "/creatives/kito-wave",
+    image: "/assets/creatives/kito-wave.jpg",
+  },
+  {
+    stageName: "Mara Collective",
+    category: "Photography",
+    verified: true,
+    profileUrl: "/creatives/mara-collective",
+    image: "/assets/creatives/mara-collective.jpg",
+  },
+  {
+    stageName: "Nairobi Threads",
+    category: "Fashion • Streetwear",
+    verified: false,
+    profileUrl: "/creatives/nairobi-threads",
+    image: "/assets/creatives/nairobi-threads.webp",
   },
 ];
+
+// category chips (add more as you grow)
+const CATEGORIES = ["All", "Studio", "DJ", "Photography", "Fashion"] as const;
+type Cat = typeof CATEGORIES[number];
 
 // diacritics-insensitive lowercase
 function normalize(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
-export default function Events() {
+export default function Creatives() {
   const [q, setQ] = useState("");
-  const [cat, setCat] = useState<string>("All");
-
-  // Build chip list dynamically from data
-  const categories = useMemo(() => {
-    const set = new Set<string>();
-    for (const e of eventsData) {
-      if (e.category) set.add(e.category.split("•")[0].trim());
-    }
-    return ["All", ...Array.from(set)];
-  }, []);
+  const [cat, setCat] = useState<Cat>("All");
 
   const filtered = useMemo(() => {
     const nq = normalize(q);
     const ncat = normalize(cat);
 
-    return eventsData
-      .filter((e) => {
-        // Category filter: "All" passes; otherwise contains match
-        if (cat !== "All") {
-          const ec = e.category ? normalize(e.category) : "";
-          if (!ec.includes(ncat)) return false;
-        }
-        // Search by title (same as before). To broaden, include venue/description.
-        return normalize(e.title).includes(nq);
-      });
+    return creativesData.filter((c) => {
+      // category filter: "All" passes; otherwise match contains (so "DJ" matches "DJ • Afro House")
+      if (cat !== "All" && !normalize(c.category).includes(ncat)) return false;
+
+      // name search (keep like your Events page)
+      return normalize(c.stageName).includes(nq);
+    });
   }, [q, cat]);
 
   return (
@@ -82,7 +74,7 @@ export default function Events() {
       <section className="max-w-6xl mx-auto px-4 py-12">
         {/* Header + Search */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <h3 className="text-2xl font-semibold">Upcoming Events</h3>
+          <h3 className="text-2xl font-semibold">Creatives</h3>
 
           <div className="relative w-full sm:w-auto sm:min-w-[320px]">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
@@ -95,7 +87,7 @@ export default function Events() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search events"
+              placeholder="Search creatives"
               className="w-full rounded-full bg-white/80 border border-black/10 py-2 pl-10 pr-10 shadow-sm focus:outline-none focus:ring-2 focus:ring-royal-purple/60"
             />
             {q && (
@@ -115,7 +107,7 @@ export default function Events() {
 
         {/* Category chips (same style as Feed) */}
         <div className="flex flex-wrap gap-2 mb-6">
-          {categories.map((c) => (
+          {CATEGORIES.map((c) => (
             <button
               key={c}
               onClick={() => setCat(c)}
@@ -131,13 +123,24 @@ export default function Events() {
         </div>
 
         {/* Results */}
-        <div className="space-y-6">
-          {filtered.length ? (
-            filtered.map((e) => <EventCard key={e.title} {...e} />)
-          ) : (
-            <div className="text-gray-600 text-sm py-10">No events match “{q}”.</div>
-          )}
-        </div>
+        {filtered.length ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {filtered.map((c) => (
+              <div key={c.stageName} className="h-full">
+                <CreativeCard
+                  stageName={c.stageName}
+                  category={c.category}
+                  verified={c.verified}
+                  profileUrl={c.profileUrl}
+                  onView={c.onView}
+                  image={c.image}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-gray-600 text-sm py-10">No creatives match “{q}”.</div>
+        )}
       </section>
     </Page>
   );

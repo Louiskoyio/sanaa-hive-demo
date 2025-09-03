@@ -76,7 +76,7 @@ export default function Navbar() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search creatives..."
+                  placeholder="Search Sanaa Hive"
                   className="w-full rounded-full py-2 pl-4 pr-20 shadow-sm focus:outline-none focus:ring-2 focus:ring-royal-purple/60 bg-white/80 border border-black/5"
                 />
                 <button
@@ -91,33 +91,22 @@ export default function Navbar() {
           {/* Right icons + Mobile menu */}
           <div className="col-span-3 flex items-center justify-end gap-4">
             <button className="relative hidden sm:inline-flex">
-              <svg
-                className="w-6 h-6 text-gray-700"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M3 3h18v4H3zM5 11h14v10H5z"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <img
+                src="/assets/navbar/shop.png"
+                alt="Sanaa Hive Logo"
+                className="h-6 w-auto"
+              />
               <span className="absolute -top-2 -right-2 bg-sanaa-orange text-white rounded-full text-xs px-1">
                 2
               </span>
             </button>
 
-            <button className="hidden sm:inline-flex w-10 h-10 rounded-full border border-black/10 bg-white/70 backdrop-blur flex items-center justify-center text-gray-700 hover:bg-white">
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path
-                  d="M12 12a5 5 0 100-10 5 5 0 000 10zM21 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+            <button className="hidden sm:inline-flex w-10 h-10 bg-white/70 backdrop-blur flex items-center justify-center text-gray-700 hover:bg-white">
+              <img
+                src="/assets/navbar/user.png"
+                alt="Sanaa Hive Logo"
+                className="h-6 w-auto"
+              />
             </button>
 
             {/* Mobile hamburger */}
