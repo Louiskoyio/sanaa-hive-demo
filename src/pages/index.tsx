@@ -6,10 +6,10 @@ import Footer from "@/components/Footer";
 
 export default function Home() {
   const artAndMerch = [
-    { title: "Abstract Canvas", price: "$120", image: "/assets/products/demo-art-1.png" },
-    { title: "Sanaa Tee", price: "$25", image: "/assets/products/demo-merch-1.png" },
-    { title: "Limited Print", price: "$40", image: "/assets/products/demo-art-2.png" },
-    { title: "Handmade Tote", price: "$30", image: "/assets/products/demo-merch-2.png" },
+    { title: "Abstract Canvas", price: "Ksh. 120", image: "/assets/merch/1.jpg" },
+    { title: "Sanaa Tee", price: "Ksh. 25", image: "/assets/merch/2.jpg" },
+    { title: "Limited Print", price: "Ksh. 40", image: "/assets/merch/1.webp" },
+    { title: "Handmade Tote", price: "Ksh. 30", image: "/assets/merch/4.jpg" },
   ];
 
   const topSelling = [

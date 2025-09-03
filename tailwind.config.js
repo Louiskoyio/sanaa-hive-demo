@@ -13,7 +13,7 @@ module.exports = {
           600: "#4C1D9F",
           700: "#3B147A",
         },
-        "sanaa-orange": "#FF7A00",
+        "sanaa-orange": "#d13841",
       },
     },
   },
