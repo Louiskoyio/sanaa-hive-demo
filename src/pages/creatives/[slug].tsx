@@ -135,8 +135,8 @@ export default function CreativeProfile() {
                 onClick={() => setTab(t.id as any)}
                 className={`px-3 py-2 text-sm font-semibold transition border-b-2 ${
                   tab === t.id
-                    ? "border-royal-purple text-royal-purple"
-                    : "border-transparent text-gray-600 hover:text-gray-900"
+                    ? "border-sanaa-orange text-sanaa-orange"
+                    : "border-transparent text-gray-600 hover:text-sanaa-orange"
                 }`}
               >
                 {t.label}

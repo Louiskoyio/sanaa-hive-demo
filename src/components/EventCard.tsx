@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type EventCardProps = {
   title: string;
   date: string | Date;
@@ -9,6 +11,7 @@ type EventCardProps = {
   onBuy?: () => void;          // fallback handler if no ticketUrl
   ctaLabel?: string;           // default: "Buy Ticket"
   badge?: string;              // e.g. "Sold Out" | "New" | "Hot"
+  slug?: string;               // NEW: when present, CTA goes to /events/[slug]
 };
 
 function formatDate(d: string | Date) {
@@ -47,6 +50,7 @@ export default function EventCard({
   onBuy,
   ctaLabel = "Buy Ticket",
   badge,
+  slug, // NEW
 }: EventCardProps) {
   const isSoldOut = badge?.toLowerCase().includes("sold");
 
@@ -128,7 +132,23 @@ export default function EventCard({
 
           {/* CTA */}
           <div className="mt-5 flex items-center gap-3">
-            {ticketUrl ? (
+            {slug ? (
+              isSoldOut ? (
+                <span
+                  aria-disabled="true"
+                  className="inline-flex items-center justify-center px-4 py-2 rounded-md font-medium bg-gray-200 text-gray-500 cursor-not-allowed"
+                >
+                  Sold Out
+                </span>
+              ) : (
+                <Link
+                  href={`/events/${slug}`}
+                  className="inline-flex items-center justify-center px-4 py-2 rounded-md font-medium bg-royal-purple text-white hover:bg-royal-purple/90 transition"
+                >
+                  {ctaLabel}
+                </Link>
+              )
+            ) : ticketUrl ? (
               <a
                 href={isSoldOut ? undefined : ticketUrl}
                 aria-disabled={isSoldOut}

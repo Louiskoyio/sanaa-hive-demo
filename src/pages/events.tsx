@@ -3,7 +3,9 @@ import { useMemo, useState } from "react";
 import Page from "@/components/Page";
 import EventCard from "@/components/EventCard";
 
+
 type EventItem = {
+  slug: string;                 // NEW: used by /events/[slug]
   title: string;
   date: string | Date;
   venue: string;
@@ -13,11 +15,12 @@ type EventItem = {
   ticketUrl?: string;
   onBuy?: () => void;
   badge?: string;
-  category?: string; // NEW: used by filter chips
+  category?: string;            // used by filter chips
 };
 
 const eventsData: EventItem[] = [
   {
+    slug: "sanaa-talent-search",
     title: "Sanaa Talent Search",
     date: "2025-09-21T16:00:00",
     venue: "Hazina Trade Center, Nairobi",
@@ -25,11 +28,12 @@ const eventsData: EventItem[] = [
       "An evening of art, live sets, and pop-up merch featuring emerging Nairobi creatives. Limited capacity—arrive early!",
     image: "/assets/highlighted-events/highlighted-event-5.png",
     price: "Ksh. 1,000",
-    ticketUrl: "https://tickets.example.com/sundown",
+    // ticketUrl: "https://tickets.example.com/sundown", // optional; slug takes precedence in EventCard
     badge: "New",
-    category: "Showcase", // <—
+    category: "Showcase",
   },
   {
+    slug: "makers-market",
     title: "Maker’s Market",
     date: new Date(),
     venue: "The Alchemist, Nairobi",
@@ -37,9 +41,9 @@ const eventsData: EventItem[] = [
       "Discover handmade crafts, prints, and apparel by local artists. Family friendly; food trucks on site.",
     image: "/assets/highlighted-events/highlighted-event-3.jpg",
     price: "Free Entry",
-    onBuy: () => alert("Handle RSVP / free ticket flow"),
+    // onBuy: () => alert("Handle RSVP / free ticket flow"), // optional; slug takes precedence
     badge: "Sold Out",
-    category: "Market", // <—
+    category: "Market",
   },
 ];
 
@@ -65,16 +69,13 @@ export default function Events() {
     const nq = normalize(q);
     const ncat = normalize(cat);
 
-    return eventsData
-      .filter((e) => {
-        // Category filter: "All" passes; otherwise contains match
-        if (cat !== "All") {
-          const ec = e.category ? normalize(e.category) : "";
-          if (!ec.includes(ncat)) return false;
-        }
-        // Search by title (same as before). To broaden, include venue/description.
-        return normalize(e.title).includes(nq);
-      });
+    return eventsData.filter((e) => {
+      if (cat !== "All") {
+        const ec = e.category ? normalize(e.category) : "";
+        if (!ec.includes(ncat)) return false;
+      }
+      return normalize(e.title).includes(nq);
+    });
   }, [q, cat]);
 
   return (
@@ -96,7 +97,7 @@ export default function Events() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search events"
-              className="w-full rounded-full bg-white/80 border border-black/10 py-2 pl-10 pr-10 shadow-sm focus:outline-none focus:ring-2 focus:ring-royal-purple/60"
+              className="w-full rounded-full bg-white/80 border border-black/10 py-2 pl-10 pr-10 shadow-sm focus:outline-none focus:ring-2 focus:ring-sanaa-orange/60"
             />
             {q && (
               <button
@@ -113,7 +114,7 @@ export default function Events() {
           </div>
         </div>
 
-        {/* Category chips (same style as Feed) */}
+        {/* Category chips */}
         <div className="flex flex-wrap gap-2 mb-6">
           {categories.map((c) => (
             <button
@@ -121,7 +122,7 @@ export default function Events() {
               onClick={() => setCat(c)}
               className={`px-3 py-1.5 rounded-full border text-sm transition ${
                 cat === c
-                  ? "bg-royal-purple text-white border-royal-purple"
+                  ? "bg-sanaa-orange text-white border-sanaa-orange"
                   : "bg-white text-gray-700 border-black/10 hover:bg-gray-50"
               }`}
             >
@@ -133,7 +134,21 @@ export default function Events() {
         {/* Results */}
         <div className="space-y-6">
           {filtered.length ? (
-            filtered.map((e) => <EventCard key={e.title} {...e} />)
+            filtered.map((e) => (
+              <EventCard
+                key={e.slug}
+                slug={e.slug}               // ← pass the slug so CTA routes to /events/[slug]
+                title={e.title}
+                date={e.date}
+                venue={e.venue}
+                description={e.description}
+                image={e.image}
+                price={e.price}
+                ticketUrl={e.ticketUrl}
+                onBuy={e.onBuy}
+                badge={e.badge}
+              />
+            ))
           ) : (
             <div className="text-gray-600 text-sm py-10">No events match “{q}”.</div>
           )}

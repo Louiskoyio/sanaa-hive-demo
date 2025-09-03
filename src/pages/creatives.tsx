@@ -88,7 +88,7 @@ export default function Creatives() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search creatives"
-              className="w-full rounded-full bg-white/80 border border-black/10 py-2 pl-10 pr-10 shadow-sm focus:outline-none focus:ring-2 focus:ring-royal-purple/60"
+              className="w-full rounded-full bg-white/80 border border-black/10 py-2 pl-10 pr-10 shadow-sm focus:outline-none focus:ring-2 focus:ring-sanaa-orange/60"
             />
             {q && (
               <button
@@ -113,7 +113,7 @@ export default function Creatives() {
               onClick={() => setCat(c)}
               className={`px-3 py-1.5 rounded-full border text-sm transition ${
                 cat === c
-                  ? "bg-royal-purple text-white border-royal-purple"
+                  ? "bg-sanaa-orange text-white border-sanaa-orange"
                   : "bg-white text-gray-700 border-black/10 hover:bg-gray-50"
               }`}
             >
