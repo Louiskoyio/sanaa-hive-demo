@@ -14,7 +14,7 @@ function formatDate(d: string | Date) {
 
 type Props = { event: EventItem };
 
-type Tab = "tickets" | "photos" | "shop";
+type Tab = "tickets" | "photos" | "updates";
 
 export default function EventProfile({ event }: Props) {
   // ---- Tabs ----
@@ -135,7 +135,7 @@ export default function EventProfile({ event }: Props) {
             {[
               { id: "tickets", label: "Tickets" },
               { id: "photos",  label: "Photos"  },
-              { id: "shop",    label: "Shop"    },
+              { id: "updates",    label: "Updates"    },
             ].map((t) => (
               <button
                 key={t.id}
@@ -257,7 +257,7 @@ export default function EventProfile({ event }: Props) {
 
           {tab === "shop" && (
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-              <div className="text-sm text-gray-600">No merch yet.</div>
+              <div className="text-sm text-gray-600">No updates yet.</div>
             </div>
           )}
         </div>
@@ -293,23 +293,23 @@ export default function EventProfile({ event }: Props) {
 
             <form onSubmit={handleConfirmPay} className="px-5 py-4">
               {/* Summary */}
-              <div className="rounded-md bg-gray-50 border border-black/10 p-4 text-sm">
+              <div className="rounded-md bg-sanaa-orange border border-black/10 p-4 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Event</span>
-                  <span className="font-medium text-gray-900">{event.title}</span>
+                  <span className="text-white font-semibold">Event</span>
+                  <span className="font-medium text-white">{event.title}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Ticket</span>
-                  <span className="font-medium text-gray-900">{selectedTicket?.label ?? "--"}</span>
+                  <span className="text-white font-semibold">Ticket</span>
+                  <span className="font-medium text-white">{selectedTicket?.label ?? "--"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Qty</span>
-                  <span className="font-medium text-gray-900">{qty}</span>
+                  <span className="text-white font-semibold">Quantity</span>
+                  <span className="font-medium text-white">{qty}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t">
-                  <span className="text-gray-600">Total</span>
-                  <span className="font-bold text-gray-900">
-                    {selectedTicket ? (total === 0 ? "Free" : `Ksh. ${total.toLocaleString()}`) : "--"}
+                  <span className="text-white font-semibold">Total</span>
+                  <span className="font-bold text-white">
+                    {selectedTicket ? (total === 0 ? "Free" : `KES ${total.toLocaleString()}`) : "--"}
                   </span>
                 </div>
               </div>
@@ -384,7 +384,7 @@ export default function EventProfile({ event }: Props) {
                 <button
                   type="button"
                   onClick={closePayModal}
-                  className="px-4 py-2 rounded-md bg-white border border-black/10 hover:bg-gray-50"
+                  className="px-4 py-2 rounded-md bg-sanaa-orange text-white border border-black/10 hover:bg-white hover:text-sanaa-orange"
                 >
                   Cancel
                 </button>
@@ -392,7 +392,7 @@ export default function EventProfile({ event }: Props) {
                   type="submit"
                   disabled={!canSubmit}
                   className={`px-4 py-2 rounded-md font-medium transition ${
-                    canSubmit ? "bg-royal-purple text-white hover:bg-royal-purple/90" : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    canSubmit ? "bg-royal-purple text-white hover:bg-royal-purple/90" : "bg-verylight-purple text-white cursor-not-allowed"
                   }`}
                 >
                   {total === 0 ? "Confirm RSVP" : "Confirm & Pay"}
