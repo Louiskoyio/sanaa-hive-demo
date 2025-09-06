@@ -70,7 +70,7 @@ export default function Creatives() {
   }, [q, cat]);
 
   return (
-    <Page>
+    <Page >
       <section className="max-w-6xl mx-auto px-4 py-12">
         {/* Header + Search */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">

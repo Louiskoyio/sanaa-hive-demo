@@ -7,11 +7,11 @@ import CreativeCard from "@/components/CreativeCard";
 
 export default function Home() {
   const creatives = [
-      {stageName: "Mint Glint Studios", category: "Studio", verified: true, profileUrl: "/creatives/mint-glint-studios", image: "/assets/creatives/mint-glint.png",},
-      {stageName: "Kito Wave", category: "DJ • Afro House", verified: true, profileUrl: "/creatives/kito-wave", image: "/assets/creatives/kito-wave.jpg",},
-      {stageName: "Mara Collective",category: "Photography",verified: true, profileUrl: "/creatives/mara-collective",image: "/assets/creatives/mara-collective.jpg",},
-      {stageName: "Nairobi Threads",category: "Fashion • Streetwear", verified: false, profileUrl: "/creatives/nairobi-threads",image: "/assets/creatives/nairobi-threads.webp",
-  },]
+    { stageName: "Mint Glint Studios", category: "Studio", verified: true, profileUrl: "/creatives/mint-glint-studios", image: "/assets/creatives/mint-glint.png" },
+    { stageName: "Kito Wave", category: "DJ • Afro House", verified: true, profileUrl: "/creatives/kito-wave", image: "/assets/creatives/kito-wave.jpg" },
+    { stageName: "Mara Collective", category: "Photography", verified: true, profileUrl: "/creatives/mara-collective", image: "/assets/creatives/mara-collective.jpg" },
+    { stageName: "Nairobi Threads", category: "Fashion • Streetwear", verified: false, profileUrl: "/creatives/nairobi-threads", image: "/assets/creatives/nairobi-threads.webp" },
+  ];
 
   const artAndMerch = [
     { title: "Abstract Canvas", price: "KES 1 200", image: "/assets/merch/1.jpg" },

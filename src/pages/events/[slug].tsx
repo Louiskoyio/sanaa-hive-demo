@@ -255,7 +255,7 @@ export default function EventProfile({ event }: Props) {
             </div>
           )}
 
-          {tab === "shop" && (
+          {tab === "updates" && (
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
               <div className="text-sm text-gray-600">No updates yet.</div>
             </div>

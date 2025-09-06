@@ -1,22 +1,23 @@
+// components/Navbar.tsx
 "use client";
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
-export default function Navbar() {
+export type SessionUser = { id: number; username: string; email: string } | null;
+
+export default function Navbar({ user }: { user: SessionUser }) {
   const pathname = usePathname();
+  const router = useRouter();
+
   const [isOpen, setIsOpen] = useState(false);
   const [show, setShow] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [query, setQuery] = useState("");
 
-  // NEW: login modal state
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const emailValid = !loginEmail || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail);
-  const passwordValid = loginPassword.length > 0;
-  const canSubmitLogin = emailValid && passwordValid && !!loginEmail;
+  // Profile dropdown
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Hide/show on scroll
   useEffect(() => {
@@ -30,41 +31,49 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [lastScrollY, isOpen]);
 
-  // Trap body scroll when modal open + close on ESC
+  // Close dropdown on route change
   useEffect(() => {
-    if (loginOpen) {
-      const onKey = (e: KeyboardEvent) => e.key === "Escape" && setLoginOpen(false);
-      document.body.style.overflow = "hidden";
-      window.addEventListener("keydown", onKey);
-      return () => {
-        document.body.style.overflow = "";
-        window.removeEventListener("keydown", onKey);
-      };
+    setMenuOpen(false);
+  }, [pathname]);
+
+  // Close on outside click + Esc
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore errors
     }
-  }, [loginOpen]);
+    router.replace("/"); // redirect home
+    setMenuOpen(false);
+  }
 
   const links = [
     { href: "/", label: "Home" },
     { href: "/events", label: "Events" },
     { href: "/creatives", label: "Creatives" },
-    { href: "/feed", label: "Feed" },
   ];
 
   const activeClass = (href: string) =>
     pathname === href ? "text-[#d13841]" : "text-gray-700 hover:text-[#d13841]";
 
-  function handleLoginSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmitLogin) return;
-    // TODO: replace with your auth flow (NextAuth, API route, etc.)
-    console.log("Login payload", {
-      email: loginEmail,
-      password: "[redacted]",
-    });
-    setLoginOpen(false);
-    setLoginEmail("");
-    setLoginPassword("");
-  }
+  const isAuthed = Boolean(user);
 
   return (
     <>
@@ -82,11 +91,7 @@ export default function Navbar() {
             {/* Logo */}
             <div className="col-span-3 flex items-center">
               <Link href="/">
-                <img
-                  src="/logo.png"
-                  alt="Sanaa Hive Logo"
-                  className="h-10 w-auto"
-                />
+                <img src="/logo.png" alt="Sanaa Hive Logo" className="h-10 w-auto" />
               </Link>
             </div>
 
@@ -113,53 +118,112 @@ export default function Navbar() {
                     placeholder="Search Sanaa Hive"
                     className="w-full rounded-full py-2 pl-4 pr-20 shadow-sm focus:outline-none focus:ring-2 focus:ring-royal-purple/60 bg-white/80 border border-black/5"
                   />
-                  <button className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-full bg-royal-purple text-white text-sm font-medium hover:opacity-90">
+                  <button className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-full bg-sanaa-orange text-white text-sm font-medium hover:opacity-90">
                     Search
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Right icons + Auth + Mobile menu */}
+            {/* Right side */}
             <div className="col-span-3 flex items-center justify-end gap-3 md:gap-4">
-              {/* Notifications */}
-              <button className="relative hidden sm:inline-flex" aria-label="Notifications">
-                <img
-                  src="/assets/navbar/shop.png"
-                  alt="Notifications"
-                  className="h-6 w-auto"
-                />
-                <span className="absolute -top-2 -right-2 bg-sanaa-orange text-white rounded-full text-xs px-1">
-                  2
-                </span>
-              </button>
+              {/* Profile + dropdown */}
+              {isAuthed && (
+                <div className="relative" ref={menuRef}>
+                  <div className="flex items-center">
+                    <Link
+                      href="/account"
+                      className="hidden sm:inline-flex w-10 h-10 bg-white/70 backdrop-blur flex items-center justify-center text-gray-700 hover:bg-white rounded-full border border-black/10"
+                      aria-label="Profile"
+                      title={user?.username || "My Account"}
+                    >
+                      <img src="/assets/navbar/user.png" alt="Profile" className="h-6 w-auto" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setMenuOpen((s) => !s)}
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      className="hidden sm:inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white/70 hover:bg-white text-gray-700"
+                      title="Open menu"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M6 9l6 6 6-6"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
 
-              {/* Profile (placeholder) */}
-              <button
-                className="hidden sm:inline-flex w-10 h-10 bg-white/70 backdrop-blur flex items-center justify-center text-gray-700 hover:bg-white rounded-full border border-black/10"
-                aria-label="Profile"
-              >
-                <img
-                  src="/assets/navbar/user.png"
-                  alt="Profile"
-                  className="h-6 w-auto"
-                />
-              </button>
-              
+                  {menuOpen && (
+                    <div
+                      role="menu"
+                      aria-label="Profile menu"
+                      className="absolute right-0 mt-2 w-44 rounded-xl bg-white/80 backdrop-blur-sm shadow-lg border border-black/10 overflow-hidden z-50"
+                    >
+                      <Link
+                        href="/events"
+                        className="block px-4 py-2.5 text-sm text-gray-800 hover:bg-royal-purple hover:text-white"
+                        onClick={() => setMenuOpen(false)}
+                        role="menuitem"
+                      >
+                        My Events
+                      </Link>
+                      <Link
+                        href="/profile"
+                        className="block px-4 py-2.5 text-sm text-gray-800 hover:bg-royal-purple hover:text-white"
+                        onClick={() => setMenuOpen(false)}
+                        role="menuitem"
+                      >
+                        My Profile
+                      </Link>
+                      <Link
+                        href="/account"
+                        className="block px-4 py-2.5 text-sm text-gray-800 hover:bg-royal-purple hover:text-white"
+                        onClick={() => setMenuOpen(false)}
+                        role="menuitem"
+                      >
+                        My Account
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left block px-4 py-2.5 text-sm hover:bg-royal-purple hover:text-white"
+                        role="menuitem"
+                      >
+                        Log Out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
-              {/* NEW: Sign Up + Log In (desktop) */}
-              <Link
-                href="/signup"
-                className="hidden md:inline-flex px-3 py-1.5 rounded-full border border-black/10 bg-white hover:bg-gray-50 text-sm font-medium"
-              >
-                Sign Up
-              </Link>
-              <button
-                onClick={() => setLoginOpen(true)}
-                className="hidden md:inline-flex px-3 py-1.5 rounded-full bg-royal-purple text-white text-sm font-medium hover:bg-royal-purple/90"
-              >
-                Log In
-              </button>
+              {/* Auth actions (desktop) */}
+              {!isAuthed && (
+                <>
+                  <Link
+                    href="/signup"
+                    className="hidden md:inline-flex px-3 py-1.5 rounded-full border border-black/10 bg-white hover:bg-gray-50 text-sm font-medium"
+                  >
+                    Sign Up
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="hidden md:inline-flex px-3 py-1.5 rounded-full bg-royal-purple text-white text-sm font-medium hover:bg-royal-purple/90"
+                  >
+                    Log In
+                  </Link>
+                </>
+              )}
 
               {/* Mobile hamburger */}
               <button
@@ -189,158 +253,7 @@ export default function Navbar() {
             </div>
           </div>
         </div>
-
-        {/* Mobile dropdown — add auth actions here too */}
-        <div
-          className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out bg-white/70 backdrop-blur-md shadow ${
-            isOpen ? "max-h-96" : "max-h-0"
-          }`}
-        >
-          <div className="px-4 pt-3 pb-4 space-y-3">
-            {/* Search (mobile) */}
-            <div className="relative">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search Sanaa Hive"
-                className="w-full rounded-full py-2 pl-4 pr-20 shadow-sm focus:outline-none focus:ring-2 focus:ring-royal-purple/60 bg-white/80 border border-black/5"
-              />
-              <button className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-full bg-royal-purple text-white text-sm font-medium hover:opacity-90">
-                Search
-              </button>
-            </div>
-
-            {/* Links */}
-            <div className="flex flex-col space-y-2">
-              {links.map(({ href, label }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setIsOpen(false)}
-                  className={`block font-semibold transition-colors ${activeClass(href)}`}
-                >
-                  {label}
-                </Link>
-              ))}
-            </div>
-
-            {/* Auth buttons (mobile) */}
-            <div className="pt-2 flex items-center gap-2">
-              <Link
-                href="/signup"
-                onClick={() => setIsOpen(false)}
-                className="flex-1 px-3 py-2 rounded-full border border-black/10 bg-white hover:bg-gray-50 text-sm font-medium text-center"
-              >
-                Sign Up
-              </Link>
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  setLoginOpen(true);
-                }}
-                className="flex-1 px-3 py-2 rounded-full bg-royal-purple text-white text-sm font-medium hover:bg-royal-purple/90"
-              >
-                Log In
-              </button>
-            </div>
-          </div>
-        </div>
       </nav>
-
-      {/* LOGIN MODAL */}
-      {loginOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          {/* overlay */}
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setLoginOpen(false)}
-            aria-hidden="true"
-          />
-          {/* modal */}
-          <div className="relative z-10 w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">Log In</h3>
-              <button
-                onClick={() => setLoginOpen(false)}
-                aria-label="Close"
-                className="rounded-full p-2 hover:bg-gray-100"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-
-            <form onSubmit={handleLoginSubmit} className="px-5 py-5">
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-                  <input
-                    type="email"
-                    autoFocus
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    className={`w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                      emailValid ? "border-black/10 focus:ring-royal-purple/60" : "border-rose-400 focus:ring-rose-300"
-                    }`}
-                    placeholder="you@example.com"
-                  />
-                  {!emailValid && (
-                    <p className="mt-1 text-xs text-rose-600">Enter a valid email address.</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Password</label>
-                  <input
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className={`w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                      passwordValid ? "border-black/10 focus:ring-royal-purple/60" : "border-rose-400 focus:ring-rose-300"
-                    }`}
-                    placeholder="••••••••"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-5 flex items-center justify-between">
-                <Link href="/forgot-password" className="text-sm text-royal-purple hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
-
-              <div className="mt-5 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLoginOpen(false)}
-                  className="px-4 py-2 rounded-md bg-sanaa-orange text-white border border-black/10 hover:bg-sanaa-orange/90"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!canSubmitLogin}
-                  className={`px-4 py-2 rounded-md font-medium transition ${
-                    canSubmitLogin
-                      ? "bg-royal-purple text-white hover:bg-royal-purple/90"
-                      : "bg-verylight-purple text-white hover:bg-verylight-purple/90 cursor-not-allowed"
-                  }`}
-                >
-                  Log In
-                </button>
-              </div>
-
-              <p className="mt-4 text-xs text-gray-600">
-                Don’t have an account?{" "}
-                <Link href="/signup" className="text-royal-purple hover:underline" onClick={() => setLoginOpen(false)}>
-                  Sign up
-                </Link>
-              </p>
-            </form>
-          </div>
-        </div>
-      )}
     </>
   );
 }
