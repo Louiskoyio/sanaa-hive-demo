@@ -15,7 +15,7 @@ type Creative = {
   verified: boolean;
   tags: string[];
 };
-
+const images_url = (process.env.NEXT_PUBLIC_MEDIA_BASE || "http://localhost:8000").replace(/\/+$/, "");
 
 function Badge({ text }: { text: string }) {
   const t = text.toLowerCase();
@@ -71,6 +71,13 @@ export default function MyProfilePage() {
   const avatar_url = (creative?.avatar_url && creative.avatar_url.trim()) || "/user.png";
   const tags = creative?.tags || [];
 
+  const avatarSrc = (() => {
+    const v = (avatar_url || "").trim();
+    if (!v) return "/user.png";
+    if (/^(https?:)?\/\//i.test(v) || /^data:/i.test(v)) return v;
+    return `${images_url}/${v.replace(/^\/+/, "")}`;
+    })();
+
   return (
     <Page>
       <section className="max-w-6xl mx-auto px-4 py-8">
@@ -79,7 +86,7 @@ export default function MyProfilePage() {
           {/* Avatar */}
           <div className="shrink-0">
             <img
-              src={avatar_url}
+              src={avatarSrc}
               alt="avatar"
               className="w-full h-56 object-cover"
               onError={(e) => {

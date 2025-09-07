@@ -87,7 +87,7 @@ function TagInput({
   );
 }
 
-/* ------------------------- CategorySelect (unchanged) ------------------------- */
+/* ------------------------- CategorySelect ------------------------- */
 function CategorySelect({
   value,
   onChange,
@@ -227,6 +227,7 @@ type FormState = {
   name: string;
   bio: string;
   category: string;
+  subcategory: string;           // NEW
   location: string; // "City, Country"
   website: string;
   email: string;
@@ -265,6 +266,7 @@ export default function SignUp() {
     name: "",
     bio: "",
     category: "",
+    subcategory: "",          // NEW
     location: "",
     website: "",
     email: "",
@@ -341,14 +343,15 @@ export default function SignUp() {
       if (!form.name.trim()) next.name = "Name is required.";
       if (!form.email.trim()) next.email = "Email is required.";
       else if (!emailValid) next.email = "Enter a valid email.";
-      if (!form.category) next.category = "Select a category.";
 
       if (!form.password) next.password = "Password is required.";
       else if (form.password.length < 8) next.password = "Use at least 8 characters.";
       if (!form.confirmPassword) next.confirmPassword = "Confirm your password.";
       else if (form.password && form.confirmPassword !== form.password)
         next.confirmPassword = "Passwords do not match.";
+      // NOTE: category validation moved to "profile" step
     } else if (s === "profile") {
+      if (!form.category) next.category = "Select a category."; // moved here
       if (form.location && !locationValid)
         next.location = "Use City, Country (e.g., Nairobi, Kenya).";
       if (form.website && !websiteValid)
@@ -388,55 +391,56 @@ export default function SignUp() {
     setField("profileFile", file);
   }
 
-async function onSubmit(e: React.FormEvent) {
-  e.preventDefault();
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
 
-  if (!validateStep("account")) { setStep("account"); return; }
-  if (!validateStep("profile")) { setStep("profile"); return; }
+    if (!validateStep("account")) { setStep("account"); return; }
+    if (!validateStep("profile")) { setStep("profile"); return; }
 
-  const fd = new FormData();
-  fd.append("name", form.name);
-  fd.append("email", form.email);
-  fd.append("password", form.password);
-  fd.append("category", form.category);
+    const fd = new FormData();
+    fd.append("name", form.name);
+    fd.append("email", form.email);
+    fd.append("password", form.password);
 
-  if (form.location) fd.append("location", form.location);
-  if (form.website) fd.append("website", form.website);
-  if (form.bio) fd.append("bio", form.bio);
-  if (form.tags.length > 0) { fd.append("tags", JSON.stringify(form.tags));}
-
-  if (form.profileFile) fd.append("avatar", form.profileFile);
+    // Profile fields:
+    fd.append("category", form.category);
+    if (form.subcategory) fd.append("subcategory", form.subcategory); // NEW
+    if (form.location) fd.append("location", form.location);
+    if (form.website) fd.append("website", form.website);
+    if (form.bio) fd.append("bio", form.bio);
+    if (form.tags.length > 0) fd.append("tags", JSON.stringify(form.tags));
+    if (form.profileFile) fd.append("avatar", form.profileFile); // <-- file key is "avatar"
 
     const DJ = (process.env.NEXT_PUBLIC_DJANGO_API_BASE || "").replace(/\/+$/, "");
     if (!DJ) {
-    setErrMsg("Signup is misconfigured: NEXT_PUBLIC_DJANGO_API_BASE is missing.");
-    return;
+      setErrMsg("Signup is misconfigured: NEXT_PUBLIC_DJANGO_API_BASE is missing.");
+      return;
     }
 
-  try {
-    const res = await fetch(`${DJ}/api/auth/creatives/register/`, {
-    method: "POST",
-    body: fd, // no Content-Type header — browser sets multipart boundary
-    });
+    try {
+      setSubmitting(true);
+      const res = await fetch(`${DJ}/api/auth/creatives/register/`, {
+        method: "POST",
+        body: fd, // no Content-Type header — browser sets multipart boundary
+      });
 
-    const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      // surface any serializer/DRF errors
-      throw new Error(
-        data?.error ||
-        data?.detail ||
-        (typeof data === "object" ? JSON.stringify(data) : "Signup failed")
-      );
+      if (!res.ok) {
+        throw new Error(
+          data?.error ||
+          data?.detail ||
+          (typeof data === "object" ? JSON.stringify(data) : "Signup failed")
+        );
+      }
+
+      setShowSuccess(true);
+    } catch (err: any) {
+      alert(err?.message || "Signup failed");
+    } finally {
+      setSubmitting(false);
     }
-
-    // success UX
-    setShowSuccess(true);
-  } catch (err: any) {
-    // Show a friendly error (optional: add an error banner state)
-    alert(err?.message || "Signup failed");
   }
-}
 
   function closeSuccess() {
     setShowSuccess(false);
@@ -525,17 +529,6 @@ async function onSubmit(e: React.FormEvent) {
                   {errors.email && <p className="mt-1 text-xs text-rose-600">{errors.email}</p>}
                 </div>
               </div>
-
-              {/* Category */}
-              <CategorySelect
-                value={form.category}
-                onChange={(v) => setField("category", v)}
-                options={CATEGORY_OPTIONS}
-                error={Boolean(errors.category)}
-              />
-              {errors.category && (
-                <p className="mt-1 text-xs text-rose-600">{errors.category}</p>
-              )}
 
               {/* Password & Confirm Password */}
               <div className="grid md:grid-cols-2 gap-4">
@@ -639,6 +632,32 @@ async function onSubmit(e: React.FormEvent) {
                 </label>
               </div>
 
+              {/* Category & Subcategory */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <CategorySelect
+                    value={form.category}
+                    onChange={(v) => setField("category", v)}
+                    options={CATEGORY_OPTIONS}
+                    error={Boolean(errors.category)}
+                    label="Category"
+                  />
+                  {errors.category && (
+                    <p className="mt-1 text-xs text-rose-600">{errors.category}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Subcategory (optional)</label>
+                  <input
+                    value={form.subcategory}
+                    onChange={(e) => setField("subcategory", e.target.value)}
+                    placeholder="e.g., DJ, Studio, Street Photographer"
+                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 border-black/10 focus:ring-royal-purple/60"
+                  />
+                </div>
+              </div>
+
               {/* Location & Website */}
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
@@ -725,6 +744,7 @@ async function onSubmit(e: React.FormEvent) {
                 <Row label="Name" value={form.name || "—"} />
                 <Row label="Email" value={form.email || "—"} />
                 <Row label="Category" value={form.category || "—"} />
+                <Row label="Subcategory" value={form.subcategory || "—"} />
                 <Row label="Location" value={form.location || "—"} />
                 <Row label="Website" value={form.website || "—"} />
                 <Row label="Bio" value={form.bio || "—"} />
