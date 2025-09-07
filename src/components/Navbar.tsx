@@ -132,7 +132,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
                 <div className="relative" ref={menuRef}>
                   <div className="flex items-center">
                     <Link
-                      href="/account"
+                      href="/profile"
                       className="hidden sm:inline-flex w-10 h-10 bg-white/70 backdrop-blur flex items-center justify-center text-gray-700 hover:bg-white rounded-full border border-black/10"
                       aria-label="Profile"
                       title={user?.username || "My Account"}
