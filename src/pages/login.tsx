@@ -7,16 +7,20 @@ import Page from "@/components/Page";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [remember, setRemember] = useState(true); // NEW: default on (common UX)
+  const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
-  const usernameValid = useMemo(() => username.trim().length > 0, [username]);
+  // validations
+  const emailValid = useMemo(
+    () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || ""),
+    [email]
+  );
   const passwordValid = useMemo(() => password.length >= 6, [password]);
-  const canSubmit = usernameValid && passwordValid && !submitting;
+  const canSubmit = emailValid && passwordValid && !submitting;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +32,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, remember }), // <-- send remember
+        body: JSON.stringify({ email, password, remember }),
       });
 
       if (!res.ok) {
@@ -43,7 +47,7 @@ export default function LoginPage() {
       const next = (router.query.next as string) || "/events";
       router.replace(next);
     } catch (err: any) {
-      setErrMsg(err.message || "Login failed");
+      setErrMsg(err?.message || "Login failed");
     } finally {
       setSubmitting(false);
     }
@@ -61,29 +65,35 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <form onSubmit={onSubmit} className="mt-6 bg-white rounded-xl shadow p-6 md:p-8 space-y-6 max-w-md">
+        <form
+          onSubmit={onSubmit}
+          className="mt-6 bg-white rounded-xl shadow p-6 md:p-8 space-y-6 max-w-md"
+        >
           <h2 className="text-lg font-semibold text-sanaa-orange">Log in</h2>
 
           <div className="space-y-4">
-            {/* Username */}
+            {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Username <span className="text-rose-500">*</span>
+                Email <span className="text-rose-500">*</span>
               </label>
               <input
-                name="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                name="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
                 className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                  !username || usernameValid
+                  !email || emailValid
                     ? "border-black/10 focus:ring-royal-purple/60"
                     : "border-rose-400 focus:ring-rose-300"
                 }`}
                 autoFocus
               />
-              {!usernameValid && username.length > 0 && (
-                <p className="mt-1 text-xs text-rose-600">Username is required.</p>
+              {!emailValid && email.length > 0 && (
+                <p className="mt-1 text-xs text-rose-600">
+                  Enter a valid email.
+                </p>
               )}
             </div>
 
@@ -114,10 +124,12 @@ export default function LoginPage() {
                 }`}
               />
               {!passwordValid && password.length > 0 && (
-                <p className="mt-1 text-xs text-rose-600">Password must be at least 6 characters.</p>
+                <p className="mt-1 text-xs text-rose-600">
+                  Password must be at least 6 characters.
+                </p>
               )}
 
-              {/* Remember me (NEW) */}
+              {/* Remember me */}
               <label className="mt-3 inline-flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -138,20 +150,28 @@ export default function LoginPage() {
           </div>
 
           <div className="flex items-center justify-between">
-            <Link href="/forgot-password" className="text-sm text-royal-purple hover:underline">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-royal-purple hover:underline"
+            >
               Forgot password?
             </Link>
           </div>
 
           <div className="flex items-center justify-between">
-            <Link href="/" className="px-4 py-2 rounded-full bg-sanaa-orange text-white border border-black/10 hover:bg-sanaa-orange/90">
+            <Link
+              href="/"
+              className="px-4 py-2 rounded-full bg-sanaa-orange text-white border border-black/10 hover:bg-sanaa-orange/90"
+            >
               Cancel
             </Link>
             <button
               type="submit"
               disabled={!canSubmit}
               className={`px-5 py-2 rounded-full bg-royal-purple text-white font-semibold transition ${
-                canSubmit ? "hover:bg-royal-purple/90" : "opacity-60 cursor-not-allowed"
+                canSubmit
+                  ? "hover:bg-royal-purple/90"
+                  : "opacity-60 cursor-not-allowed"
               }`}
             >
               {submitting ? "Logging in..." : "Log in"}
@@ -168,14 +188,22 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Social login buttons (no functionality yet) */}
+          {/* Social login buttons (placeholder) */}
           <div className="flex flex-col gap-3">
-            <button type="button" className="flex items-center justify-center gap-3 w-full px-4 py-2 rounded-md border border-black/10 bg-white hover:bg-gray-50">
+            <button
+              type="button"
+              className="flex items-center justify-center gap-3 w-full px-4 py-2 rounded-md border border-black/10 bg-white hover:bg-gray-50"
+            >
               <img src="/google.png" alt="Google" className="h-5 w-5" />
-              <span className="text-sm font-medium text-gray-700">Sign in with Google</span>
+              <span className="text-sm font-medium text-gray-700">
+                Sign in with Google
+              </span>
             </button>
 
-            <button type="button" className="flex items-center justify-center gap-3 w-full px-4 py-2 rounded-md border border-black/10 bg-black text-white hover:bg-gray-900">
+            <button
+              type="button"
+              className="flex items-center justify-center gap-3 w-full px-4 py-2 rounded-md border border-black/10 bg-black text-white hover:bg-gray-900"
+            >
               <img src="/apple.png" alt="Apple" className="h-5 w-5" />
               <span className="text-sm font-medium">Sign in with Apple</span>
             </button>

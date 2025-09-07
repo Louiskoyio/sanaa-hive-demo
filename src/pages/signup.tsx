@@ -1,8 +1,228 @@
 // pages/signup.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import Page from "@/components/Page";
 
+/* ------------------------------ TagInput ------------------------------ */
+function TagInput({
+  value,
+  onChange,
+  placeholder = "Add services (press Space or Enter)",
+  maxTags = 10,
+  maxLength = 24,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+  maxTags?: number;
+  maxLength?: number;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function commit(tagRaw: string) {
+    let t = tagRaw.trim();
+    if (!t) return;
+    t = t.replace(/[,\s]+/g, "-").replace(/[^a-zA-Z0-9-_]/g, "");
+    if (!t) return;
+    if (t.length > maxLength) t = t.slice(0, maxLength);
+    if (value.includes(t)) return;
+    if (value.length >= maxTags) return;
+    onChange([...value, t]);
+    setDraft("");
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === " " || e.key === "Tab" || e.key === ",") {
+      e.preventDefault();
+      commit(draft);
+    } else if (e.key === "Backspace" && !draft && value.length) {
+      onChange(value.slice(0, -1));
+    }
+  }
+
+  function removeAt(i: number) {
+    const next = value.slice();
+    next.splice(i, 1);
+    onChange(next);
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700">Tags (optional)</label>
+      <div className="mt-1 w-full min-h-[42px] rounded-md border border-black/10 px-2 py-1.5 bg-white
+                      focus-within:ring-2 focus-within:ring-royal-purple/60 flex flex-wrap gap-1.5">
+        {value.map((t, i) => (
+          <span
+            key={`${t}-${i}`}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
+                       bg-royal-purple/10 text-royal-purple border border-royal-purple/20"
+          >
+            {t}
+            <button
+              type="button"
+              onClick={() => removeAt(i)}
+              className="rounded-full p-0.5 hover:bg-royal-purple/10"
+              aria-label={`Remove ${t}`}
+              title="Remove"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </span>
+        ))}
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={value.length ? "" : placeholder}
+          className="flex-1 min-w-[140px] px-2 py-1 text-sm focus:outline-none bg-transparent"
+        />
+      </div>
+      <div className="mt-1 text-[11px] text-gray-500">
+        Separate with <span className="font-medium text-royal-purple">Space</span> or{" "}
+        <span className="font-medium text-royal-purple">Enter</span>. Up to {maxTags} tags.
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------- CategorySelect (unchanged) ------------------------- */
+function CategorySelect({
+  value,
+  onChange,
+  options,
+  error,
+  label = "Category",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  error?: boolean;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState<number>(() =>
+    Math.max(0, options.findIndex((o) => o === value))
+  );
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!open) return;
+      if (!menuRef.current) return;
+      if (
+        !menuRef.current.contains(e.target as Node) &&
+        !btnRef.current?.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (!open) return;
+      if (e.key === "Escape") {
+        setOpen(false);
+        btnRef.current?.focus();
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((i) => Math.min(options.length - 1, i + 1));
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((i) => Math.max(0, i - 1));
+      }
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        const choice = options[activeIndex] ?? options[0];
+        onChange(choice);
+        setOpen(false);
+        btnRef.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey as any);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey as any);
+    };
+  }, [open, options, activeIndex, onChange]);
+
+  useEffect(() => {
+    const idx = options.findIndex((o) => o === value);
+    if (idx >= 0) setActiveIndex(idx);
+  }, [value, options]);
+
+  return (
+    <div className="relative">
+      <label className="block text-sm font-medium text-gray-700">
+        {label} <span className="text-rose-500">*</span>
+      </label>
+
+      <button
+        type="button"
+        ref={btnRef}
+        onClick={() => setOpen((s) => !s)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`mt-1 w-full flex items-center justify-between rounded-md border px-3 py-2 text-left focus:outline-none focus:ring-2 ${
+          error
+            ? "border-rose-400 focus:ring-rose-300"
+            : "border-black/10 focus:ring-royal-purple/60"
+        } bg-white`}
+      >
+        <span className={value ? "text-gray-900" : "text-gray-400"}>
+          {value || "Select a category"}
+        </span>
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M6 9l6 6 6-6"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          ref={menuRef}
+          role="listbox"
+          tabIndex={-1}
+          className="absolute z-50 mt-2 w-full rounded-xl bg-white/80 backdrop-blur-md shadow-lg border border-black/10 overflow-hidden"
+        >
+          {options.map((opt, i) => {
+            const selected = opt === value;
+            const active = i === activeIndex;
+            return (
+              <button
+                key={opt}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onMouseEnter={() => setActiveIndex(i)}
+                onClick={() => {
+                  onChange(opt);
+                  setOpen(false);
+                  btnRef.current?.focus();
+                }}
+                className={`w-full text-left px-4 py-2.5 text-sm transition ${
+                  active ? "bg-gray-50" : "bg-transparent"
+                } ${selected ? "font-semibold text-gray-900" : "text-gray-800"}`}
+              >
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------- Types ---------------------------------- */
 type FormState = {
   name: string;
   bio: string;
@@ -11,8 +231,13 @@ type FormState = {
   website: string;
   email: string;
   profileFile: File | null;
+
+  password: string;
+  confirmPassword: string;
+
+  tags: string[];
 };
-type Errors = Partial<Record<keyof FormState, string>>;
+type Errors = Partial<Record<keyof FormState | "password" | "confirmPassword", string>>;
 type StepKey = "account" | "profile" | "confirm";
 
 const CATEGORY_OPTIONS = [
@@ -44,6 +269,9 @@ export default function SignUp() {
     website: "",
     email: "",
     profileFile: null,
+    password: "",
+    confirmPassword: "",
+    tags: [],
   });
   const [errors, setErrors] = useState<Errors>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -51,22 +279,26 @@ export default function SignUp() {
   const [step, setStep] = useState<StepKey>("account");
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // --- Helpers ---
+  // NEW: network state
+  const [submitting, setSubmitting] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
     setErrors((e) => ({ ...e, [key]: undefined }));
   }
   const stepIndex = STEPS.findIndex((s) => s.id === step);
 
-  // preview avatar
   useEffect(() => {
-    if (!form.profileFile) { setPreviewUrl(null); return; }
+    if (!form.profileFile) {
+      setPreviewUrl(null);
+      return;
+    }
     const url = URL.createObjectURL(form.profileFile);
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [form.profileFile]);
 
-  // Validations
   const emailValid = useMemo(
     () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email || ""),
     [form.email]
@@ -88,15 +320,35 @@ export default function SignUp() {
     }
   }, [form.website]);
 
-  // Validate per step
+  // Password strength (0-4)
+  const pwScore = useMemo(() => {
+    const v = form.password || "";
+    let score = 0;
+    if (v.length >= 8) score++;
+    if (/[a-z]/.test(v) && /[A-Z]/.test(v)) score++;
+    if (/\d/.test(v)) score++;
+    if (/[^A-Za-z0-9]/.test(v)) score++;
+    return Math.min(score, 4);
+  }, [form.password]);
+
+  const pwStrengthLabel =
+    ["Very weak", "Weak", "Okay", "Good", "Strong"][pwScore] || "Very weak";
+  const pwBarWidth = `${(pwScore / 4) * 100}%`;
+
   function validateStep(s: StepKey): boolean {
     const next: Errors = {};
     if (s === "account") {
       if (!form.name.trim()) next.name = "Name is required.";
       if (!form.email.trim()) next.email = "Email is required.";
       else if (!emailValid) next.email = "Enter a valid email.";
-    } else if (s === "profile") {
       if (!form.category) next.category = "Select a category.";
+
+      if (!form.password) next.password = "Password is required.";
+      else if (form.password.length < 8) next.password = "Use at least 8 characters.";
+      if (!form.confirmPassword) next.confirmPassword = "Confirm your password.";
+      else if (form.password && form.confirmPassword !== form.password)
+        next.confirmPassword = "Passwords do not match.";
+    } else if (s === "profile") {
       if (form.location && !locationValid)
         next.location = "Use City, Country (e.g., Nairobi, Kenya).";
       if (form.website && !websiteValid)
@@ -106,7 +358,6 @@ export default function SignUp() {
     return Object.keys(next).length === 0;
   }
 
-  // Ensure all previous steps valid before jumping forward
   function canGoTo(target: StepKey): boolean {
     const targetIdx = STEPS.findIndex((s) => s.id === target);
     for (let i = 0; i < targetIdx; i++) {
@@ -130,33 +381,78 @@ export default function SignUp() {
     setField("profileFile", file);
   }
   function onDrop(e: React.DragEvent<HTMLLabelElement>) {
-    e.preventDefault(); e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
     setDragActive(false);
     const file = e.dataTransfer.files?.[0] || null;
     setField("profileFile", file);
   }
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    // validate all before final submit
-    if (!validateStep("account")) { setStep("account"); return; }
-    if (!validateStep("profile")) { setStep("profile"); return; }
-    // TODO: POST to API (use FormData if uploading)
+async function onSubmit(e: React.FormEvent) {
+  e.preventDefault();
+
+  if (!validateStep("account")) { setStep("account"); return; }
+  if (!validateStep("profile")) { setStep("profile"); return; }
+
+  const fd = new FormData();
+  fd.append("name", form.name);
+  fd.append("email", form.email);
+  fd.append("password", form.password);
+  fd.append("category", form.category);
+
+  if (form.location) fd.append("location", form.location);
+  if (form.website) fd.append("website", form.website);
+  if (form.bio) fd.append("bio", form.bio);
+  if (form.tags.length > 0) { fd.append("tags", JSON.stringify(form.tags));}
+
+  if (form.profileFile) fd.append("avatar", form.profileFile);
+
+    const DJ = (process.env.NEXT_PUBLIC_DJANGO_API_BASE || "").replace(/\/+$/, "");
+    if (!DJ) {
+    setErrMsg("Signup is misconfigured: NEXT_PUBLIC_DJANGO_API_BASE is missing.");
+    return;
+    }
+
+  try {
+    const res = await fetch(`${DJ}/api/auth/creatives/register/`, {
+    method: "POST",
+    body: fd, // no Content-Type header — browser sets multipart boundary
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      // surface any serializer/DRF errors
+      throw new Error(
+        data?.error ||
+        data?.detail ||
+        (typeof data === "object" ? JSON.stringify(data) : "Signup failed")
+      );
+    }
+
+    // success UX
     setShowSuccess(true);
+  } catch (err: any) {
+    // Show a friendly error (optional: add an error banner state)
+    alert(err?.message || "Signup failed");
   }
-  function closeSuccess() { setShowSuccess(false); router.push("/"); }
+}
+
+  function closeSuccess() {
+    setShowSuccess(false);
+    router.push("/login");
+  }
 
   return (
     <Page>
       <section className="max-w-3xl mx-auto px-4 py-10">
-            <div>
-            <h3 className="text-2xl font-semibold">Join Sanaa Hive</h3>
-
-              <p className="mt-2 text-black/90 max-w-xl">
-                Create your profile, showcase your craft, and connect with the
-                Nairobi creative scene.
-              </p>
-            </div>
+        <div>
+          <h3 className="text-2xl font-semibold">Join Sanaa Hive</h3>
+          <p className="mt-2 text-black/90 max-w-xl">
+            Create your profile, showcase your craft, and connect with the
+            Nairobi creative scene.
+          </p>
+        </div>
 
         {/* Stepper */}
         <div className="flex items-center justify-between mb-6">
@@ -196,6 +492,8 @@ export default function SignUp() {
           {step === "account" && (
             <>
               <h2 className="text-lg font-semibold text-sanaa-orange">Account</h2>
+
+              {/* Name & Email */}
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
@@ -228,9 +526,79 @@ export default function SignUp() {
                 </div>
               </div>
 
+              {/* Category */}
+              <CategorySelect
+                value={form.category}
+                onChange={(v) => setField("category", v)}
+                options={CATEGORY_OPTIONS}
+                error={Boolean(errors.category)}
+              />
+              {errors.category && (
+                <p className="mt-1 text-xs text-rose-600">{errors.category}</p>
+              )}
+
+              {/* Password & Confirm Password */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Password <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setField("password", e.target.value)}
+                    placeholder="••••••••"
+                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
+                      errors.password ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
+                    }`}
+                  />
+                  {/* Strength gauge */}
+                  <div className="mt-2">
+                    <div className="h-1.5 w-full rounded-full bg-verylight-purple/60">
+                      <div
+                        className="h-1.5 rounded-full bg-royal-purple transition-all"
+                        style={{ width: pwBarWidth }}
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="mt-1 text-[11px] text-gray-600">
+                      Strength: <span className="text-royal-purple font-medium">{pwStrengthLabel}</span>
+                    </div>
+                  </div>
+                  {errors.password && <p className="mt-1 text-xs text-rose-600">{errors.password}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Confirm Password <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={form.confirmPassword}
+                    onChange={(e) => setField("confirmPassword", e.target.value)}
+                    placeholder="••••••••"
+                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
+                      errors.confirmPassword ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
+                    }`}
+                  />
+                  {errors.confirmPassword && (
+                    <p className="mt-1 text-xs text-rose-600">{errors.confirmPassword}</p>
+                  )}
+                </div>
+              </div>
+
+              {errMsg && (
+                <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                  {errMsg}
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-3">
-                <button type="button" onClick={goNext}
-                        className="px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90">
+                <button
+                  type="button"
+                  onClick={goNext}
+                  className="px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90"
+                >
                   Continue
                 </button>
               </div>
@@ -243,7 +611,9 @@ export default function SignUp() {
 
               {/* Avatar uploader */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Profile picture (optional)</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Profile picture (optional)
+                </label>
                 <label
                   onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
                   onDragLeave={() => setDragActive(false)}
@@ -269,28 +639,8 @@ export default function SignUp() {
                 </label>
               </div>
 
-              {/* Category & Location */}
+              {/* Location & Website */}
               <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Category <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={form.category}
-                      onChange={(e) => setField("category", e.target.value)}
-                      className={`mt-1 w-full appearance-none rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                        errors.category ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
-                      }`}
-                    >
-                      <option value="" disabled>Select a category</option>
-                      {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <span className="pointer-events-none absolute right-2 top-[14px] text-gray-500">▾</span>
-                  </div>
-                  {errors.category && <p className="mt-1 text-xs text-rose-600">{errors.category}</p>}
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Location <span className="text-xs text-gray-500">(City, Country)</span>
@@ -305,22 +655,24 @@ export default function SignUp() {
                   />
                   {errors.location && <p className="mt-1 text-xs text-rose-600">{errors.location}</p>}
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Website (optional)
+                  </label>
+                  <input
+                    value={form.website}
+                    onChange={(e) => setField("website", e.target.value)}
+                    placeholder="https://example.com"
+                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
+                      errors.website ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
+                    }`}
+                  />
+                  {errors.website && <p className="mt-1 text-xs text-rose-600">{errors.website}</p>}
+                </div>
               </div>
 
-              {/* Website & Bio */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Website (optional)</label>
-                <input
-                  value={form.website}
-                  onChange={(e) => setField("website", e.target.value)}
-                  placeholder="https://example.com"
-                  className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                    errors.website ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
-                  }`}
-                />
-                {errors.website && <p className="mt-1 text-xs text-rose-600">{errors.website}</p>}
-              </div>
-
+              {/* Bio */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Bio (optional)</label>
                 <textarea
@@ -332,12 +684,34 @@ export default function SignUp() {
                 />
               </div>
 
+              {/* Tags */}
+              <TagInput
+                value={form.tags}
+                onChange={(tags) => setField("tags", tags)}
+                placeholder="AfroHouse mixing events photography"
+                maxTags={10}
+                maxLength={24}
+              />
+
+              {errMsg && (
+                <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                  {errMsg}
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
-                <button type="button" onClick={goBack} className="px-4 py-2 rounded-full bg-sanaa-orange text-white border border-black/10 hover:bg-gray-50">
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="px-4 py-2 rounded-full bg-sanaa-orange text-white border border-black/10 hover:bg-sanaa-orange/90"
+                >
                   Back
                 </button>
-                <button type="button" onClick={goNext}
-                        className="px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90">
+                <button
+                  type="button"
+                  onClick={goNext}
+                  className="px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90"
+                >
                   Continue
                 </button>
               </div>
@@ -354,17 +728,36 @@ export default function SignUp() {
                 <Row label="Location" value={form.location || "—"} />
                 <Row label="Website" value={form.website || "—"} />
                 <Row label="Bio" value={form.bio || "—"} />
+                <Row label="Tags" value={form.tags.length ? form.tags.join(", ") : "—"} />
               </div>
 
+              {errMsg && (
+                <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                  {errMsg}
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
-                <button type="button" onClick={goBack} className="px-4 py-2 rounded-full bg-sanaa-orange text-white border border-black/10 hover:bg-sanaa-orange/90">
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="px-4 py-2 rounded-full bg-sanaa-orange text-white border border-black/10 hover:bg-sanaa-orange/90"
+                >
                   Back
                 </button>
-                <button type="submit" className="px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90">
-                  Create Account
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90 ${
+                    submitting ? "opacity-70 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {submitting ? "Creating..." : "Create Account"}
                 </button>
               </div>
-              <p className="text-xs text-gray-500">By creating an account, you agree to our Terms & Privacy Policy.</p>
+              <p className="text-xs text-gray-500">
+                By creating an account, you agree to our Terms & Privacy Policy.
+              </p>
             </>
           )}
         </form>
@@ -372,7 +765,11 @@ export default function SignUp() {
 
       {/* Success Modal */}
       {showSuccess && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="absolute inset-0 bg-black/50" onClick={closeSuccess} />
           <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
             <div className="px-5 py-6">
@@ -381,13 +778,18 @@ export default function SignUp() {
                   <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </div>
-              <h3 className="mt-4 text-lg font-semibold text-gray-900 text-center">Registration successful</h3>
+              <h3 className="mt-4 text-lg font-semibold text-gray-900 text-center">
+                Registration successful
+              </h3>
               <p className="mt-2 text-sm text-gray-700 text-center">
-                A verification email has been sent to <span className="font-semibold">{form.email || "your email"}</span>.
+                You can now log in and complete your profile.
               </p>
               <div className="mt-5 flex items-center justify-center">
-                <button onClick={closeSuccess} className="px-4 py-2 rounded-full bg-royal-purple text-white font-medium hover:bg-royal-purple/90">
-                  Go to Home
+                <button
+                  onClick={closeSuccess}
+                  className="px-4 py-2 rounded-full bg-royal-purple text-white font-medium hover:bg-royal-purple/90"
+                >
+                  Go to Login
                 </button>
               </div>
             </div>
@@ -398,7 +800,7 @@ export default function SignUp() {
   );
 }
 
-// small row renderer for confirm step
+/* ------------------------------- Row component ------------------------------ */
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4 px-4 py-3">
