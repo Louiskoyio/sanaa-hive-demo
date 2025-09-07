@@ -1,18 +1,21 @@
 // pages/profile.tsx
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Page from "@/components/Page";
 
 type Me = { id: number | string; username: string; email: string; is_creator: boolean };
 type Creative = {
   display_name: string;
+  category?: string;
+  subcategory?: string;
   location: string;
   bio: string;
   website: string;
   avatar_url: string;
   verified: boolean;
   tags: string[];
-  // the rest can be added later: social_links, price range, availability, etc.
 };
+
 
 function Badge({ text }: { text: string }) {
   const t = text.toLowerCase();
@@ -21,7 +24,7 @@ function Badge({ text }: { text: string }) {
 }
 
 export default function MyProfilePage() {
-  const [tab, setTab] = useState<"about" | "portfolio" | "events" | "shop">("about");
+  const [tab, setTab] = useState<"about" | "events">("about");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
@@ -30,15 +33,23 @@ export default function MyProfilePage() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      setLoading(true);
-      setErr(null);
       try {
-        const r = await fetch("/api/my-profile");
+        setErr(null);
+        setLoading(true);
+
+        // auth check
+        const meR = await fetch("/api/me", { cache: "no-store" });
+        const meJ = await meR.json();
+        if (!meR.ok || !meJ?.authenticated) throw new Error(meJ?.error || "Not authenticated");
+        if (!mounted) return;
+        setMe(meJ.user);
+
+        // load creative profile
+        const r = await fetch("/api/me/profile", { cache: "no-store" });
         const j = await r.json();
         if (!r.ok) throw new Error(j?.error || "Failed to load profile");
         if (!mounted) return;
-        setMe(j.me);
-        setCreative(j.creative);
+        setCreative(j);
       } catch (e: any) {
         if (!mounted) return;
         setErr(e?.message || "Failed to load profile");
@@ -46,15 +57,18 @@ export default function MyProfilePage() {
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const stageName = creative?.display_name || me?.username || "Your profile";
+  const stageName = (creative?.display_name || me?.username || "Your profile").trim();
   const isVerified = !!creative?.verified;
-  const location = creative?.location || "";
-  const bio = creative?.bio || "";
-  const website = creative?.website || "";
-  const avatar = creative?.avatar_url || "/assets/creatives/mint-glint.png"; // fallback
+  const category = (creative?.category || "").trim();
+  const location = (creative?.location || "").trim();
+  const bio = (creative?.bio || "").trim();
+  const website = (creative?.website || "").trim();
+  const avatar_url = (creative?.avatar_url && creative.avatar_url.trim()) || "/user.png";
   const tags = creative?.tags || [];
 
   return (
@@ -64,7 +78,16 @@ export default function MyProfilePage() {
         <div className="-mt-10 md:-mt-12 bg-white rounded-xl shadow-md p-4 md:p-6 flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
           {/* Avatar */}
           <div className="shrink-0">
-            <img src={avatar} alt="avatar" className="w-full h-56 object-cover" />
+            <img
+              src={avatar_url}
+              alt="avatar"
+              className="w-full h-56 object-cover"
+              onError={(e) => {
+                const img = e.currentTarget;
+                if (img.src.endsWith("/user.png")) return;
+                img.src = "/user.png";
+              }}
+            />
           </div>
 
           {/* Identity */}
@@ -75,31 +98,29 @@ export default function MyProfilePage() {
               </h1>
               {!loading && <Badge text={isVerified ? "Verified" : "Not Verified"} />}
             </div>
+
             {!loading && (
               <>
-                <div className="mt-1 text-gray-700">{/* category not on model; you can add later */}</div>
-                <div className="text-sm text-gray-500">{location}</div>
+                {category && (
+                  <div className="mt-1 text-gray-700 text-sm">{category}</div>
+                )}
+                {location && (
+                  <div className="text-sm text-gray-500">{location}</div>
+                )}
               </>
             )}
-
-            {/* Stats placeholder (hide for now) */}
-            {/* <div className="mt-3 flex flex-wrap items-center gap-6 text-sm text-gray-600">
-              <div><span className="font-semibold text-gray-900">0</span> followers</div>
-              <div><span className="font-semibold text-gray-900">0</span> likes</div>
-              <div><span className="font-semibold text-gray-900">0</span> sales</div>
-            </div> */}
           </div>
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            <button className="px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:bg-royal-purple/90">
-              Edit
-            </button>
-            <button className="px-4 py-2 rounded-md bg-white border border-black/10 hover:bg-gray-50">
-              Message
-            </button>
-            <button className="px-4 py-2 rounded-md bg-sanaa-orange text-white font-medium hover:opacity-90">
-              Hire
+            <Link
+              href="/profile/edit"
+              className="px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:bg-royal-purple/90"
+            >
+              Edit Profile
+            </Link>
+            <button className="px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:opacity-90">
+              Create Event
             </button>
           </div>
         </div>
@@ -116,9 +137,7 @@ export default function MyProfilePage() {
           <div className="flex items-center gap-3 border-b border-black/10">
             {[
               { id: "about", label: "About" },
-              { id: "portfolio", label: "Portfolio" },
               { id: "events", label: "Events" },
-              { id: "shop", label: "Shop" },
             ].map((t) => (
               <button
                 key={t.id}
@@ -140,20 +159,22 @@ export default function MyProfilePage() {
               <div className="md:col-span-2 bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900">About</h3>
                 <p className="mt-2 text-gray-700 leading-relaxed">
-                  {loading ? "Loading…" : (bio || "No bio yet.")}
+                  {loading ? "Loading…" : bio || "No bio yet."}
                 </p>
 
                 <h4 className="mt-6 text-sm font-semibold text-gray-900">Tags / Skills</h4>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {loading
-                    ? <span className="text-xs text-gray-500">Loading…</span>
-                    : tags.length
-                      ? tags.map((t) => (
-                          <span key={t} className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 text-xs">
-                            {t}
-                          </span>
-                        ))
-                      : <span className="text-xs text-gray-500">No tags yet.</span>}
+                  {loading ? (
+                    <span className="text-xs text-gray-500">Loading…</span>
+                  ) : tags.length ? (
+                    tags.map((t) => (
+                      <span key={t} className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 text-xs">
+                        {t}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-500">No tags yet.</span>
+                  )}
                 </div>
               </div>
 
@@ -163,7 +184,9 @@ export default function MyProfilePage() {
                   <li>
                     Email:{" "}
                     {me?.email ? (
-                      <a className="underline" href={`mailto:${me.email}`}>{me.email}</a>
+                      <a className="underline" href={`mailto:${me.email}`}>
+                        {me.email}
+                      </a>
                     ) : (
                       <span className="text-gray-500">—</span>
                     )}
@@ -179,30 +202,13 @@ export default function MyProfilePage() {
                     )}
                   </li>
                 </ul>
-
-                {/* Optional sections when you add to model */}
-                {/* <h4 className="mt-6 text-sm font-semibold text-gray-900">Availability</h4>
-                <p className="mt-1 text-sm text-gray-700">—</p>
-
-                <h4 className="mt-6 text-sm font-semibold text-gray-900">Price Range</h4>
-                <p className="mt-1 text-sm text-gray-700">—</p> */}
               </aside>
             </div>
-          )}
-
-          {/* Portfolio */}
-          {tab === "portfolio" && (
-            <div className="mt-6 text-sm text-gray-600">No portfolio items yet.</div>
           )}
 
           {/* Events */}
           {tab === "events" && (
             <div className="mt-6 text-sm text-gray-600">No upcoming events.</div>
-          )}
-
-          {/* Shop */}
-          {tab === "shop" && (
-            <div className="mt-6 text-sm text-gray-600">No items yet.</div>
           )}
         </div>
       </section>
