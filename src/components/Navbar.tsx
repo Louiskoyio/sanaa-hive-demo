@@ -80,7 +80,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
       <nav
         className={`fixed inset-x-0 top-0 z-50 transition-transform duration-300 ${
           show ? "translate-y-0" : "-translate-y-full"
-        } bg-royal-purple/70 backdrop-blur-md shadow`}
+        } bg-royal-purple/60 backdrop-blur-lg shadow`}
         style={{ height: "var(--nav-height, 64px)" }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -91,7 +91,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
             {/* Logo */}
             <div className="col-span-3 flex items-center">
               <Link href="/">
-                <img src="/logo.png" alt="Sanaa Hive Logo" className="h-10 w-auto" />
+                <img src="/logo-w.png" alt="Sanaa Hive Logo" className="h-10 w-auto" />
               </Link>
             </div>
 

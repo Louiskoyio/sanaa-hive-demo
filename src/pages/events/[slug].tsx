@@ -1,16 +1,32 @@
 // pages/events/[slug].tsx
-import { GetStaticPaths, GetStaticProps } from "next";
+import type { GetServerSideProps } from "next";
 import Page from "@/components/Page";
-import { EVENTS, getEventBySlug, getEventSlugs, type EventItem } from "@/lib/data/events";
 import { useEffect, useMemo, useState } from "react";
 
-function formatDate(d: string | Date) {
+function formatDate(d?: string | Date | null) {
+  if (!d) return "";
   const date = typeof d === "string" ? new Date(d) : d;
   return new Intl.DateTimeFormat(undefined, {
-    weekday: "short", year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(date);
 }
+
+type Ticket = { id: string; label: string; price: number; available: number };
+type EventItem = {
+  slug: string;
+  title: string;
+  description?: string;
+  venue?: string;
+  image: string;        // resolved absolute/relative image URL to show
+  badge?: string;
+  date?: string | null; // ISO
+  tickets?: Ticket[];   // keep mock for now
+};
 
 type Props = { event: EventItem };
 
@@ -20,7 +36,7 @@ export default function EventProfile({ event }: Props) {
   // ---- Tabs ----
   const [tab, setTab] = useState<Tab>("tickets");
 
-  // ---- Tickets state ----
+  // ---- Tickets state (mock for now) ----
   const tickets = event.tickets || [];
   const [selected, setSelected] = useState<string | null>(tickets[0]?.id ?? null);
   const [qty, setQty] = useState(1);
@@ -58,22 +74,16 @@ export default function EventProfile({ event }: Props) {
     if (!selectedTicket || selectedTicket.available <= 0) return;
     setShowPayModal(true);
   }
-
   function closePayModal() {
     setShowPayModal(false);
   }
-
   function handlePhoneChange(v: string) {
-    // only allow digits, max length 9
     const onlyDigits = v.replace(/\D/g, "").slice(0, 9);
     setPhone9(onlyDigits);
   }
-
   function handleConfirmPay(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
-
-    // MOCK submit — replace with your API call (e.g., create checkout session + M-Pesa STK push)
     const payload = {
       event: event.title,
       ticket: selectedTicket?.label,
@@ -109,33 +119,37 @@ export default function EventProfile({ event }: Props) {
                 </span>
               )}
             </div>
-            <p className="mt-2 text-gray-700">{event.description}</p>
+            {event.description && <p className="mt-2 text-gray-700">{event.description}</p>}
 
             <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M7 3v3M17 3v3M3 8h18M5 21h14a2 2 0 0 0 2-2V8H3v11a2 2 0 0 0 2 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-                <span>{formatDate(event.date)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 22s7-5.3 7-12a7 7 0 1 0-14 0c0 6.7 7 12 7 12Z" stroke="currentColor" strokeWidth="1.5"/>
-                  <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
-                </svg>
-                <span>{event.venue}</span>
-              </div>
+              {event.date && (
+                <div className="flex items-center gap-2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M7 3v3M17 3v3M3 8h18M5 21h14a2 2 0 0 0 2-2V8H3v11a2 2 0 0 0 2 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span>{formatDate(event.date)}</span>
+                </div>
+              )}
+              {event.venue && (
+                <div className="flex items-center gap-2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 22s7-5.3 7-12a7 7 0 1 0-14 0c0 6.7 7 12 7 12Z" stroke="currentColor" strokeWidth="1.5"/>
+                    <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+                  </svg>
+                  <span>{event.venue}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Tabs (Tickets + Photos + Shop) */}
+        {/* Tabs (Tickets + Photos + Updates) */}
         <div className="mt-6">
           <div className="flex items-center gap-3 border-b border-black/10">
             {[
               { id: "tickets", label: "Tickets" },
               { id: "photos",  label: "Photos"  },
-              { id: "updates",    label: "Updates"    },
+              { id: "updates", label: "Updates" },
             ].map((t) => (
               <button
                 key={t.id}
@@ -247,9 +261,10 @@ export default function EventProfile({ event }: Props) {
 
           {tab === "photos" && (
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {EVENTS.slice(0, 3).map((x) => (
-                <div key={x.slug} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <img src={x.image} alt={x.title} className="w-full h-56 object-cover" />
+              {/* Placeholder photos */}
+              {[1, 2, 3].map((x) => (
+                <div key={x} className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <img src={event.image} alt={event.title} className="w-full h-56 object-cover" />
                 </div>
               ))}
             </div>
@@ -346,7 +361,7 @@ export default function EventProfile({ event }: Props) {
                     emailValid ? "border-black/10 focus:ring-royal-purple/60" : "border-rose-400 focus:ring-rose-300"
                   }`}
                   placeholder="asha@example.com"
-                  required={false} // optional overall, but validated if present
+                  required={false}
                 />
                 {!emailValid && (
                   <p className="mt-1 text-xs text-rose-600">Please enter a valid email address.</p>
@@ -406,18 +421,40 @@ export default function EventProfile({ event }: Props) {
   );
 }
 
-// --- SSG: generate pages for each event ---
-export const getStaticPaths: GetStaticPaths = async () => {
-  const slugs = getEventSlugs();
-  return {
-    paths: slugs.map((slug) => ({ params: { slug } })),
-    fallback: "blocking",
-  };
-};
-
-export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {
+// ---- SSR: fetch event by slug from Django (or your proxy) ----
+export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const slug = params?.slug as string;
-  const event = getEventBySlug(slug);
-  if (!event) return { notFound: true };
-  return { props: { event }, revalidate: 60 };
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+  const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE || API_BASE).replace(/\/+$/, "");
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/events/${encodeURIComponent(slug)}/`, {
+      headers: { Accept: "application/json" },
+    });
+    if (resp.status === 404) return { notFound: true };
+    const data = await resp.json();
+
+    const cover = data.poster || data.cover_url || null;
+    const image =
+      cover
+        ? (/^(https?:)?\/\//i.test(cover) ? cover : `${MEDIA_BASE}/${String(cover).replace(/^\/+/, "")}`)
+        : "/event-placeholder.jpg";
+
+    return {
+      props: {
+        event: {
+          slug: data.slug,
+          title: data.title || "Untitled event",
+          description: data.description || "",
+          venue: data.venue || "",
+          image,
+          badge: data.status,
+          date: data.start_time || data.start_at || null,
+          tickets: [], // keep mocked for now
+        },
+      },
+    };
+  } catch {
+    return { notFound: true };
+  }
 };

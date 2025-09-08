@@ -21,6 +21,7 @@ type Creative = {
 
 type EventItem = {
   id: number | string;
+  slug: string;
   title: string;
   start_time?: string; // ISO
   venue?: string;
@@ -213,14 +214,14 @@ export default function MyProfilePage() {
             <img
               src={avatarSrc}
               alt="avatar"
-              className="h-32 w-32 md:h-40 md:w-40 rounded-full object-cover bg-gray-100"
+              className="h-32 w-52 md:h-40 md:w-56 rounded-xl object-cover bg-gray-100"
               onError={(e) => {
                 const img = e.currentTarget as HTMLImageElement;
                 if (img.src.endsWith("/user.png")) return;
                 img.src = "/user.png";
               }}
             />
-            <span className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/30 transition grid place-items-center text-white text-xs font-medium opacity-0 group-hover:opacity-100">
+            <span className="absolute inset-0 h-36 w-52 md:h-40 md:w-56 rounded-xl bg-black/0 group-hover:bg-black/30 transition grid place-items-center text-white text-xs font-medium opacity-0 group-hover:opacity-100">
               Change
             </span>
           </button>
@@ -311,7 +312,7 @@ export default function MyProfilePage() {
                     <span className="text-xs text-gray-500">Loading…</span>
                   ) : tags.length ? (
                     tags.map((t) => (
-                      <span key={t} className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 text-xs">
+                      <span key={t} className="px-2.5 py-1 rounded-full bg-sanaa-orange/70 text-white text-xs">
                         {t}
                       </span>
                     ))
@@ -327,7 +328,7 @@ export default function MyProfilePage() {
                   <li>
                     Email:{" "}
                     {me?.email ? (
-                      <a className="underline" href={`mailto:${me.email}`}>
+                      <a className="text-sanaa-orange" href={`mailto:${me.email}`}>
                         {me.email}
                       </a>
                     ) : (
@@ -337,7 +338,7 @@ export default function MyProfilePage() {
                   <li>
                     Website:{" "}
                     {website ? (
-                      <a className="underline" href={website} target="_blank" rel="noreferrer">
+                      <a className="text-sanaa-orange" href={website} target="_blank" rel="noreferrer">
                         {website.replace(/^https?:\/\//, "")}
                       </a>
                     ) : (
@@ -374,9 +375,17 @@ export default function MyProfilePage() {
                           <img src={img} alt="" className="w-full h-full object-cover" />
                         </div>
                         <div className="p-4">
-                          <div className="text-sm font-semibold text-gray-900">{ev.title || "Untitled event"}</div>
+                          <div className="text-sm font-semibold text-sanaa-orange">{ev.title || "Untitled event"}</div>
                           <div className="text-xs text-gray-600 mt-1">{fmtDate(ev.start_time)}</div>
-                          {ev.venue && <div className="text-xs text-gray-500">{ev.venue}</div>}
+                          {ev.venue && <div className="text-xs text-gray-500">{ev.venue}</div>} 
+                        </div>
+                        <div className="p-4 pt-0">
+                          <Link
+                            href={`/events/${encodeURIComponent(ev.slug)}`}
+                            className="inline-block w-full text-center px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:opacity-90"
+                          >
+                            View Event
+                          </Link>
                         </div>
                       </div>
                     );

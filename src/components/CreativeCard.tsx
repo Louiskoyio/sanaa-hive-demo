@@ -37,7 +37,7 @@ export default function CreativeCard({
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden h-full">
       {/* Top banner (same height as ProductCard image) */}
-      <div className="relative w-full h-48 bg-gradient-to-br from-royal-purple to-royal-purple-700 flex items-center justify-center">
+      <div className="relative w-full h-48 bg-white  flex items-center justify-center">
         {showImage ? (
           <>
             <img

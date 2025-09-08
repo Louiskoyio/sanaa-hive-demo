@@ -1,3 +1,5 @@
+// pages/creatives/[slug].tsx
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Page from "@/components/Page";
@@ -12,6 +14,15 @@ type Creative = {
   avatar_url?: string;
   verified?: boolean;
   tags?: string[];
+};
+
+type EventItem = {
+  id: number | string;
+  slug: string;            // ⬅️ added
+  title: string;
+  start_time?: string;     // ISO
+  venue?: string;
+  cover_url?: string;
 };
 
 const images_url = (process.env.NEXT_PUBLIC_MEDIA_BASE || "http://localhost:8000").replace(/\/+$/, "");
@@ -29,10 +40,12 @@ export default function PublicCreativeProfile() {
   const [err, setErr] = useState<string | null>(null);
   const [creative, setCreative] = useState<Creative | null>(null);
 
-  const slug = useMemo(() => {
-    const s = String(query.slug || "").trim();
-    return s;
-  }, [query.slug]);
+  // events
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsErr, setEventsErr] = useState<string | null>(null);
+
+  const slug = useMemo(() => String(query.slug || "").trim(), [query.slug]);
 
   useEffect(() => {
     if (!isReady || !slug) return;
@@ -42,6 +55,7 @@ export default function PublicCreativeProfile() {
       try {
         setErr(null);
         setLoading(true);
+        // creative detail
         const r = await fetch(`/api/creatives/${encodeURIComponent(slug)}`, { cache: "no-store" });
         const j = await r.json();
         if (!r.ok) throw new Error(j?.error || "Failed to load creative");
@@ -52,6 +66,27 @@ export default function PublicCreativeProfile() {
         setErr(e?.message || "Failed to load creative");
       } finally {
         if (mounted) setLoading(false);
+      }
+    })();
+
+    // load events in parallel
+    (async () => {
+      try {
+        setEventsErr(null);
+        setEventsLoading(true);
+        const er = await fetch(`/api/creatives/${encodeURIComponent(slug)}/events`, { cache: "no-store" });
+        const ej = await er.json().catch(() => ({}));
+        if (!er.ok) {
+          setEventsErr(ej?.error || "Failed to load events");
+          setEvents([]);
+        } else {
+          setEvents(Array.isArray(ej) ? ej : Array.isArray(ej?.results) ? ej.results : []);
+        }
+      } catch (e: any) {
+        setEventsErr(e?.message || "Failed to load events");
+        setEvents([]);
+      } finally {
+        setEventsLoading(false);
       }
     })();
 
@@ -72,19 +107,34 @@ export default function PublicCreativeProfile() {
     return `${images_url}/${v.replace(/^\/+/, "")}`;
   })();
 
+  const fmtDate = (iso?: string) => {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso || "";
+    }
+  };
+
   return (
     <Page>
       <section className="max-w-6xl mx-auto px-4 py-8">
         {/* Header card */}
         <div className="-mt-10 md:-mt-12 bg-white rounded-xl shadow-md p-4 md:p-6 flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
-          {/* Avatar */}
-          <div className="shrink-0">
+          {/* Avatar — rounded rectangle */}
+          <div className="relative shrink-0">
             <img
               src={avatarSrc}
               alt="avatar"
-              className="w-full h-56 object-cover"
+              className="h-32 w-52 md:h-40 md:w-56 rounded-xl object-cover bg-gray-100"
               onError={(e) => {
-                const img = e.currentTarget;
+                const img = e.currentTarget as HTMLImageElement;
                 if (img.src.endsWith("/user.png")) return;
                 img.src = "/user.png";
               }}
@@ -107,7 +157,6 @@ export default function PublicCreativeProfile() {
               </>
             )}
           </div>
-          {/* NOTE: No action buttons on public view */}
         </div>
 
         {/* Error */}
@@ -151,15 +200,18 @@ export default function PublicCreativeProfile() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {loading ? (
                     <span className="text-xs text-gray-500">Loading…</span>
-                  ) : (creative?.tags?.length ? (
+                  ) : creative?.tags?.length ? (
                     creative.tags.map((t) => (
-                      <span key={t} className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 text-xs">
+                      <span
+                        key={t}
+                        className="px-2.5 py-1 rounded-full bg-sanaa-orange/70 text-white text-xs"
+                      >
                         {t}
                       </span>
                     ))
                   ) : (
                     <span className="text-xs text-gray-500">No tags yet.</span>
-                  ))}
+                  )}
                 </div>
               </div>
 
@@ -169,7 +221,7 @@ export default function PublicCreativeProfile() {
                   <li>
                     Website:{" "}
                     {website ? (
-                      <a className="underline" href={website} target="_blank" rel="noreferrer">
+                      <a className="text-sanaa-orange" href={website} target="_blank" rel="noreferrer">
                         {website.replace(/^https?:\/\//, "")}
                       </a>
                     ) : (
@@ -183,7 +235,49 @@ export default function PublicCreativeProfile() {
 
           {/* Events (public) */}
           {tab === "events" && (
-            <div className="mt-6 text-sm text-gray-600">No upcoming events.</div>
+            <div className="mt-6">
+              {eventsLoading ? (
+                <div className="text-sm text-gray-600">Loading events…</div>
+              ) : eventsErr ? (
+                <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                  {eventsErr}
+                </div>
+              ) : !events.length ? (
+                <div className="text-sm text-gray-600">No events yet.</div>
+              ) : (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {events.map((ev) => {
+                    const img = ev.cover_url
+                      ? (/^(https?:)?\/\//i.test(ev.cover_url)
+                          ? ev.cover_url
+                          : `${images_url}/${ev.cover_url.replace(/^\/+/, "")}`)
+                      : "/event-placeholder.jpg";
+                    return (
+                      <div key={String(ev.id)} className="bg-white rounded-lg shadow overflow-hidden flex flex-col">
+                        <div className="h-40 w-full bg-gray-100">
+                          <img src={img} alt="" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="p-4 flex-1">
+                          <div className="text-sm font-semibold text-sanaa-orange">
+                            {ev.title || "Untitled event"}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">{fmtDate(ev.start_time)}</div>
+                          {ev.venue && <div className="text-xs text-gray-500">{ev.venue}</div>}
+                        </div>
+                        <div className="p-4 pt-0">
+                          <Link
+                            href={`/events/${encodeURIComponent(ev.slug)}`}
+                            className="inline-block w-full text-center px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:opacity-90"
+                          >
+                            View Event
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </section>
