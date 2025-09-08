@@ -407,75 +407,89 @@ export default function SignUp() {
 
     // endpoints (adjust if yours differ)
     const REGISTER = `${DJ}/api/auth/creatives/register/`;
-    const TOKEN_OBTAIN = `${DJ}/api/auth/token/`;
+    const SESSION_LOGIN = `${DJ}/api/auth/login/`;
+    const JWT_CREATE = `${DJ}/api/auth/token/`;
     const PROFILE = `${DJ}/api/me/creative-profile/`;
 
     try {
-    setSubmitting(true);
-    setErrMsg(null);
+      setSubmitting(true);
+      setErrMsg(null);
 
-    // 1) REGISTER
-    const regFd = new FormData();
-    regFd.append("name", form.name);
-    regFd.append("email", form.email);
-    regFd.append("password", form.password);
+      // 1) REGISTER
+      // NOTE: include 'category' (+ optional 'subcategory') because backend requires it.
+      // Do NOT send 'avatar' here; we send it in the profile PATCH.
+      const regFd = new FormData();
+      regFd.append("name", form.name);
+      regFd.append("email", form.email);
+      regFd.append("password", form.password);
+      regFd.append("category", form.category);
+      if (form.subcategory) regFd.append("subcategory", form.subcategory);
 
-    const regRes = await fetch(REGISTER, { method: "POST", body: regFd });
-    const regData = await regRes.json().catch(() => ({}));
-    if (!regRes.ok) {
+      const regRes = await fetch(REGISTER, { method: "POST", body: regFd });
+      const regData = await regRes.json().catch(() => ({}));
+      if (!regRes.ok) {
         throw new Error(regData?.detail || regData?.error || "Signup failed");
-    }
+      }
 
-    // 2) AUTHENTICATE (SimpleJWT expects username by default)
-    //    use the username returned by the register endpoint
-    const loginUsername = regData?.username;
-    if (!loginUsername) {
-        // fallback: try deriving from email if needed (optional)
-        // const base = form.email.split("@")[0].replace(/\./g, "_");
-        // loginUsername = base;
-        throw new Error("No username returned from register; cannot obtain token.");
-    }
+      // 2) AUTHENTICATE (JWT preferred)
+      let authHeaders: Record<string, string> = {};
+      let fetchInitExtra: RequestInit = {};
 
-    const tokenRes = await fetch(TOKEN_OBTAIN, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: loginUsername, password: form.password }),
-    });
-    const tokenData = await tokenRes.json().catch(() => ({}));
-    if (!tokenRes.ok || !tokenData?.access) {
-        throw new Error(tokenData?.detail || "Could not obtain JWT");
-    }
-    const authHeaders: Record<string, string> = {
-        Authorization: `Bearer ${tokenData.access}`,
-    };
+      if (AUTH_MODE === "jwt") {
+        const tokenRes = await fetch(JWT_CREATE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: form.email, password: form.password }),
+        });
+        const tokenData = await tokenRes.json().catch(() => ({}));
+        if (!tokenRes.ok || !tokenData?.access) {
+          throw new Error(tokenData?.detail || "Could not obtain JWT");
+        }
+        authHeaders["Authorization"] = `Bearer ${tokenData.access}`;
+      } else {
+        const loginRes = await fetch(SESSION_LOGIN, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email: form.email, password: form.password }),
+        });
+        const loginData = await loginRes.json().catch(() => ({}));
+        if (!loginRes.ok) throw new Error(loginData?.detail || "Login failed");
+        fetchInitExtra.credentials = "include";
+        // For CSRF-protected PATCH, add X-CSRFToken here if needed.
+      }
 
-    // 3) PATCH PROFILE
-    const profFd = new FormData();
-    profFd.append("display_name", form.name);
-    profFd.append("category", form.category);
-    if (form.subcategory) profFd.append("subcategory", form.subcategory);
-    if (form.location) profFd.append("location", form.location);
-    if (form.website) profFd.append("website", form.website);
-    if (form.bio) profFd.append("bio", form.bio);
-    if (form.tags.length) profFd.append("tags", JSON.stringify(form.tags));
-    if (form.profileFile) profFd.append("avatar", form.profileFile, form.profileFile.name);
+      // 3) PATCH PROFILE (persist everything, including avatar)
+      const profFd = new FormData();
+      profFd.append("display_name", form.name);
+      profFd.append("category", form.category);
+      if (form.subcategory) profFd.append("subcategory", form.subcategory);
+      if (form.location) profFd.append("location", form.location);
+      if (form.website) profFd.append("website", form.website);
+      if (form.bio) profFd.append("bio", form.bio);
+      if (form.tags.length) profFd.append("tags", JSON.stringify(form.tags));
+      if (form.profileFile) profFd.append("avatar", form.profileFile, form.profileFile.name);
 
-    const profRes = await fetch(PROFILE, {
+      const profRes = await fetch(PROFILE, {
         method: "PATCH",
         headers: authHeaders,
         body: profFd,
-    });
-    const profData = await profRes.json().catch(() => ({}));
-    if (!profRes.ok) {
+        ...fetchInitExtra,
+      });
+      const profData = await profRes.json().catch(() => ({}));
+      if (!profRes.ok) {
+        if (AUTH_MODE === "session" && profRes.status === 403) {
+          throw new Error("Forbidden (CSRF). Add X-CSRFToken header or switch to JWT.");
+        }
         throw new Error(profData?.detail || "Could not save profile");
-    }
+      }
 
-    setShowSuccess(true);
+      setShowSuccess(true);
     } catch (err: any) {
-    setErrMsg(err?.message || "Signup failed");
-    alert(err?.message || "Signup failed");
+      setErrMsg(err?.message || "Signup failed");
+      alert(err?.message || "Signup failed");
     } finally {
-    setSubmitting(false);
+      setSubmitting(false);
     }
   }
 

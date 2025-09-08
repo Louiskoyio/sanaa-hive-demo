@@ -71,7 +71,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
   ];
 
   const activeClass = (href: string) =>
-    pathname === href ? "text-[#d13841]" : "text-gray-700 hover:text-[#d13841]";
+    pathname === href ? "text-[#d13841]" : "text-white hover:text-[#d13841]";
 
   const isAuthed = Boolean(user);
 
@@ -80,7 +80,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
       <nav
         className={`fixed inset-x-0 top-0 z-50 transition-transform duration-300 ${
           show ? "translate-y-0" : "-translate-y-full"
-        } bg-white/70 backdrop-blur-md shadow`}
+        } bg-royal-purple/70 backdrop-blur-md shadow`}
         style={{ height: "var(--nav-height, 64px)" }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

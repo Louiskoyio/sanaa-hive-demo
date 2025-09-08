@@ -126,9 +126,21 @@ export default function MyProfilePage() {
             >
               Edit Profile
             </Link>
-            <button className="px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:opacity-90">
-              Create Event
-            </button>
+            {me?.is_creator ? (
+            <Link
+            href="/create-event"
+            className="px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:opacity-90"
+            >
+            Create Event
+            </Link>
+        ) : (
+            <span
+            title="Only creators can create events"
+            className="px-4 py-2 rounded-md bg-gray-300 text-gray-600 font-medium cursor-not-allowed"
+            >
+            Create Event
+            </span>
+        )}
           </div>
         </div>
 
