@@ -5,17 +5,17 @@ import Page from "@/components/Page";
 
 type Creative = {
   display_name: string;
-  category?: string;
-  subcategory?: string;
+  category?: string | null;
+  subcategory?: string | null;
   location: string;
   bio: string;
   website: string;
-  avatar_url: string;
+  avatar_url: string | null;
   verified: boolean;
   tags: string[];
 };
 
-/* ——— same CategorySelect component you used on signup ——— */
+/* ------------------------- CategorySelect ------------------------- */
 function CategorySelect({
   value,
   onChange,
@@ -40,27 +40,15 @@ function CategorySelect({
     function onDoc(e: MouseEvent) {
       if (!open) return;
       if (!menuRef.current) return;
-      if (
-        !menuRef.current.contains(e.target as Node) &&
-        !btnRef.current?.contains(e.target as Node)
-      ) {
+      if (!menuRef.current.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node)) {
         setOpen(false);
       }
     }
     function onKey(e: KeyboardEvent) {
       if (!open) return;
-      if (e.key === "Escape") {
-        setOpen(false);
-        btnRef.current?.focus();
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveIndex((i) => Math.min(options.length - 1, i + 1));
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveIndex((i) => Math.max(0, i - 1));
-      }
+      if (e.key === "Escape") { setOpen(false); btnRef.current?.focus(); }
+      if (e.key === "ArrowDown") { e.preventDefault(); setActiveIndex((i) => Math.min(options.length - 1, i + 1)); }
+      if (e.key === "ArrowUp") { e.preventDefault(); setActiveIndex((i) => Math.max(0, i - 1)); }
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         const choice = options[activeIndex] ?? options[0];
@@ -84,10 +72,7 @@ function CategorySelect({
 
   return (
     <div className="relative">
-      <label className="block text-sm font-medium text-gray-700">
-        {label}
-      </label>
-
+      <label className="block text-sm font-medium text-gray-700">{label}</label>
       <button
         type="button"
         ref={btnRef}
@@ -95,22 +80,12 @@ function CategorySelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`mt-1 w-full flex items-center justify-between rounded-md border px-3 py-2 text-left focus:outline-none focus:ring-2 ${
-          error
-            ? "border-rose-400 focus:ring-rose-300"
-            : "border-black/10 focus:ring-royal-purple/60"
+          error ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
         } bg-white`}
       >
-        <span className={value ? "text-gray-900" : "text-gray-400"}>
-          {value || "Select a category"}
-        </span>
+        <span className={value ? "text-gray-900" : "text-gray-400"}>{value || "Select a category"}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M6 9l6 6 6-6"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            fill="none"
-          />
+          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
         </svg>
       </button>
 
@@ -131,11 +106,7 @@ function CategorySelect({
                 role="option"
                 aria-selected={selected}
                 onMouseEnter={() => setActiveIndex(i)}
-                onClick={() => {
-                  onChange(opt);
-                  setOpen(false);
-                  btnRef.current?.focus();
-                }}
+                onClick={() => { onChange(opt); setOpen(false); btnRef.current?.focus(); }}
                 className={`w-full text-left px-4 py-2.5 text-sm transition ${
                   active ? "bg-gray-50" : "bg-transparent"
                 } ${selected ? "font-semibold text-gray-900" : "text-gray-800"}`}
@@ -150,7 +121,7 @@ function CategorySelect({
   );
 }
 
-/* ——— tags chip input ——— */
+/* ------------------------------ TagInput ------------------------------ */
 function TagInput({
   value,
   onChange,
@@ -177,18 +148,11 @@ function TagInput({
     setDraft("");
   };
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (["Enter", " ", "Tab", ","].includes(e.key)) {
-      e.preventDefault();
-      commit(draft);
-    } else if (e.key === "Backspace" && !draft && value.length) {
-      onChange(value.slice(0, -1));
-    }
+    if (["Enter", " ", "Tab", ","].includes(e.key)) { e.preventDefault(); commit(draft); }
+    else if (e.key === "Backspace" && !draft && value.length) { onChange(value.slice(0, -1)); }
   };
-  const removeAt = (i: number) => {
-    const next = value.slice();
-    next.splice(i, 1);
-    onChange(next);
-  };
+  const removeAt = (i: number) => { const next = value.slice(); next.splice(i, 1); onChange(next); };
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700">Tags</label>
@@ -199,12 +163,7 @@ function TagInput({
             className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-royal-purple/10 text-royal-purple border border-royal-purple/20"
           >
             {t}
-            <button
-              type="button"
-              onClick={() => removeAt(i)}
-              className="rounded-full p-0.5 hover:bg-royal-purple/10"
-              aria-label={`Remove ${t}`}
-            >
+            <button type="button" onClick={() => removeAt(i)} className="rounded-full p-0.5 hover:bg-royal-purple/10" aria-label={`Remove ${t}`}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                 <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
@@ -227,18 +186,8 @@ function TagInput({
   );
 }
 
-/* ——— options (same as signup) ——— */
-const CATEGORY_OPTIONS = [
-  "DJ",
-  "Artist",
-  "Studio",
-  "Photographer",
-  "Merchant",
-  "Singer",
-  "Rapper",
-  "Influencer",
-  "Other",
-];
+/* ------------------------------ Options ------------------------------ */
+const CATEGORY_OPTIONS = ["DJ","Artist","Studio","Photographer","Merchant","Singer","Rapper","Influencer","Other"];
 
 export default function EditProfilePage() {
   const router = useRouter();
@@ -256,6 +205,7 @@ export default function EditProfilePage() {
   const [tags, setTags] = useState<string[]>([]);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [serverAvatar, setServerAvatar] = useState<string | null>(null);
 
   // load current profile (no-cache)
   useEffect(() => {
@@ -264,36 +214,33 @@ export default function EditProfilePage() {
       try {
         setErr(null);
         setLoading(true);
+        // NOTE: this assumes you have a Next.js API route that proxies to Django
         const r = await fetch("/api/me/profile", { cache: "no-store" });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j?.error || "Failed to load profile");
+        if (r.status === 401) { router.replace("/login"); return; }
+        const j: Creative = await r.json();
+        if (!r.ok) throw new Error((j as any)?.error || "Failed to load profile");
 
         if (!mounted) return;
-        const p: Creative = j;
-        setDisplayName(p.display_name || "");
-        setLocation(p.location || "");
-        setBio(p.bio || "");
-        setWebsite(p.website || "");
-        setTags(Array.isArray(p.tags) ? p.tags : []);
-        setCategory(p.category || "");
-        setSubcategory(p.subcategory || "");
+        setDisplayName(j.display_name || "");
+        setLocation(j.location || "");
+        setBio(j.bio || "");
+        setWebsite(j.website || "");
+        setTags(Array.isArray(j.tags) ? j.tags : []);
+        setCategory(j.category || "");
+        setSubcategory(j.subcategory || "");
+        setServerAvatar(j.avatar_url || null);
       } catch (e: any) {
         if (mounted) setErr(e?.message || "Failed to load profile");
       } finally {
         if (mounted) setLoading(false);
       }
     })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    return () => { mounted = false; };
+  }, [router]);
 
   // avatar preview
   useEffect(() => {
-    if (!avatarFile) {
-      setAvatarPreview(null);
-      return;
-    }
+    if (!avatarFile) { setAvatarPreview(null); return; }
     const url = URL.createObjectURL(avatarFile);
     setAvatarPreview(url);
     return () => URL.revokeObjectURL(url);
@@ -307,7 +254,6 @@ export default function EditProfilePage() {
 
     setErr(null);
     setSaving(true);
-
     try {
       let r: Response;
 
@@ -315,17 +261,17 @@ export default function EditProfilePage() {
         // multipart PATCH (correct key is "avatar")
         const fd = new FormData();
         fd.append("display_name", display_name);
-        fd.append("location", location);
-        fd.append("category", category);
-        fd.append("subcategory", subcategory);
-        fd.append("bio", bio);
-        fd.append("website", website);
-        fd.append("tags", JSON.stringify(tags));
-        fd.append("avatar", avatarFile);
+        if (location) fd.append("location", location);
+        if (category) fd.append("category", category);
+        if (subcategory) fd.append("subcategory", subcategory);
+        if (bio) fd.append("bio", bio);
+        if (website) fd.append("website", website);
+        if (tags.length) fd.append("tags", JSON.stringify(tags));
+        fd.append("avatar", avatarFile, avatarFile.name);
 
         r = await fetch("/api/me/profile", {
           method: "PATCH",
-          body: fd,
+          body: fd,              // let the browser set multipart boundary
           cache: "no-store",
         });
       } else {
@@ -340,15 +286,26 @@ export default function EditProfilePage() {
             website,
             category,
             subcategory,
-            tags,
+            tags,                 // array is fine; backend accepts list or JSON string
           }),
           cache: "no-store",
         });
       }
 
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(typeof j === "object" ? j?.error || JSON.stringify(j) : "Update failed");
+      if (r.status === 401) { router.replace("/login"); return; }
+      if (!r.ok) {
+        // show field errors if any
+        if (j && typeof j === "object") throw new Error(j.detail || j.error || JSON.stringify(j));
+        throw new Error("Update failed");
+      }
 
+      // update UI immediately with server's latest avatar url if returned
+      if (j?.avatar_url) setServerAvatar(j.avatar_url);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+
+      // go back to profile page (or comment this out to stay)
       router.replace("/profile");
     } catch (e: any) {
       setErr(e?.message || "Update failed");
@@ -364,16 +321,13 @@ export default function EditProfilePage() {
         <p className="text-sm text-gray-600">Update your public profile details.</p>
 
         <form onSubmit={onSubmit} className="mt-6 bg-white rounded-xl shadow p-6 space-y-6" noValidate>
-          {/* Avatar */}
+          {/* Avatar 
           <div>
             <label className="block text-sm font-medium text-gray-700">Profile picture</label>
             <label
               className="mt-2 flex items-center gap-4 p-4 rounded-xl border-2 border-dashed cursor-pointer hover:bg-gray-50"
               onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (e.dataTransfer.files?.[0]) setAvatarFile(e.dataTransfer.files[0]);
-              }}
+              onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.[0]) setAvatarFile(e.dataTransfer.files[0]); }}
             >
               <input
                 type="file"
@@ -383,7 +337,9 @@ export default function EditProfilePage() {
               />
               <div className="h-16 w-16 rounded-full overflow-hidden bg-gray-100 grid place-items-center">
                 {avatarPreview ? (
-                  <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                  <img src={avatarPreview} alt="New preview" className="w-full h-full object-cover" />
+                ) : serverAvatar ? (
+                  <img src={serverAvatar} alt="Current avatar" className="w-full h-full object-cover" />
                 ) : (
                   <img src="/user.png" alt="Default avatar" className="w-full h-full object-cover" />
                 )}
@@ -393,7 +349,7 @@ export default function EditProfilePage() {
                 <div className="text-gray-500">PNG/JPG up to ~2MB recommended</div>
               </div>
             </label>
-          </div>
+          </div>*/}
 
           {/* Display name */}
           <div>
@@ -406,14 +362,10 @@ export default function EditProfilePage() {
             />
           </div>
 
-          {/* Category (dropdown) */}
-          <CategorySelect
-            value={category}
-            onChange={setCategory}
-            options={CATEGORY_OPTIONS}
-          />
+          {/* Category */}
+          <CategorySelect value={category} onChange={setCategory} options={CATEGORY_OPTIONS} />
 
-          {/* Subcategory (free text) */}
+          {/* Subcategory */}
           <div>
             <label className="block text-sm font-medium text-gray-700">Subcategory</label>
             <input
