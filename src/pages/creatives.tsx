@@ -156,15 +156,15 @@ export default function Creatives() {
         <div className="flex flex-wrap gap-2 mb-6">
           {cats.map((c) => (
             <button
-              key={c}
-              onClick={() => setCat(c)}
-              className={`px-3 py-1.5 rounded-full border text-sm transition ${
+            key={c}
+            onClick={() => setCat(c)}
+            className={`px-3 py-1.5 rounded-full border border-transparent text-sm font-semibold text-white transform-gpu transition-transform duration-150 ${
                 cat === c
-                  ? "bg-sanaa-orange text-white border-sanaa-orange"
-                  : "bg-white text-gray-700 border-black/10 hover:bg-gray-50"
-              }`}
+                ? "bg-royal-purple hover:scale-105"
+                : "bg-sanaa-orange hover:bg-gradient-to-r from-royal-purple/90 via-royal-purple/50 to-sanaa-orange/90 hover:scale-105"
+            }`}
             >
-              {c}
+            {c}
             </button>
           ))}
         </div>

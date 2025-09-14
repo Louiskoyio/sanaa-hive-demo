@@ -8,7 +8,7 @@ type CreativeCardProps = {
   profileUrl?: string;         // if provided, the CTA is a link
   onView?: () => void;         // click handler fallback
   ctaLabel?: string;           // default "View Profile"
-  image?: string;              // NEW: optional profile/banner image
+  image?: string;              // optional profile/banner image
   imageAlt?: string;           // optional alt text (defaults to stageName)
 };
 
@@ -36,8 +36,8 @@ export default function CreativeCard({
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden h-full">
-      {/* Top banner (same height as ProductCard image) */}
-      <div className="relative w-full h-48 bg-white  flex items-center justify-center">
+      {/* Top banner */}
+      <div className="relative w-full h-48 bg-white flex items-center justify-center">
         {showImage ? (
           <>
             <img
@@ -46,7 +46,6 @@ export default function CreativeCard({
               className="absolute inset-0 w-full h-full object-cover"
               onError={() => setImgError(true)}
             />
-            {/* optional subtle overlay to keep badge legible on bright images */}
             <div className="absolute inset-0 bg-black/0" />
           </>
         ) : (
@@ -55,16 +54,22 @@ export default function CreativeCard({
           </span>
         )}
 
-        {/* Verified / Not Verified badge */}
-        <span
-          className={`absolute left-3 top-3 px-2.5 py-1 text-xs font-semibold rounded-full shadow
-            ${verified ? "bg-emerald-500 text-white" : "bg-gray-200 text-gray-700"}`}
-        >
-          {verified ? "Verified" : "Not Verified"}
-        </span>
+        {/* Verified icon + chip (together) */}
+        {verified && (
+          <div className="absolute left-3 top-3 inline-flex items-center gap-0">
+            <img
+              src="/verified-badge.png"
+              alt="Verified"
+              className="h-8 w-8"
+            />
+            <span className="rounded-full bg-royal-purple text-white px-2 py-0.5 text-[11px] font-semibold">
+              Verified
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Body (mirrors ProductCard spacing & typography) */}
+      {/* Body */}
       <div className="p-4 flex flex-col h-full">
         <h4 className="font-semibold text-sanaa-orange line-clamp-1">{stageName}</h4>
 

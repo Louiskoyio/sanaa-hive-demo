@@ -31,15 +31,6 @@ type EventItem = {
 const images_url = (process.env.NEXT_PUBLIC_MEDIA_BASE || "http://localhost:8000").replace(/\/+$/, "");
 const AVATAR_UPLOAD_URL = "/api/profile/avatar/"; // dedicated avatar endpoint
 
-/* ----------------------------- UI Bits ----------------------------- */
-function Badge({ text }: { text: string }) {
-  const t = text.toLowerCase();
-  const classes = t.includes("verified")
-    ? "bg-emerald-500 text-white"
-    : "bg-gray-200 text-gray-700";
-  return <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${classes}`}>{text}</span>;
-}
-
 /* ----------------------------- Page ----------------------------- */
 export default function MyProfilePage() {
   const router = useRouter();
@@ -232,7 +223,20 @@ export default function MyProfilePage() {
               <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">
                 {loading ? "Loading…" : stageName}
               </h1>
-              {!loading && <Badge text={isVerified ? "Verified" : "Not Verified"} />}
+
+              {/* Verified icon + chip — only when verified */}
+              {!loading && isVerified && (
+                <div className="flex items-center gap-0">
+                  <img
+                    src="/verified-badge.png"
+                    alt="Verified"
+                    className="h-8 w-8"
+                  />
+                  <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-royal-purple text-white">
+                    Verified
+                  </span>
+                </div>
+              )}
             </div>
 
             {!loading && (
@@ -251,20 +255,30 @@ export default function MyProfilePage() {
             >
               Edit Profile
             </Link>
-            {me?.is_creator ? (
-              <Link
-                href="/create-event"
-                className="px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:opacity-90"
-              >
-                Create Event
-              </Link>
+
+            {isVerified ? (
+              me?.is_creator ? (
+                <Link
+                  href="/create-event"
+                  className="px-4 py-2 rounded-md bg-royal-purple text-white font-medium hover:opacity-90"
+                >
+                  Create Event
+                </Link>
+              ) : (
+                <span
+                  title="Only creators can create events"
+                  className="px-4 py-2 rounded-md bg-gray-300 text-gray-600 font-medium cursor-not-allowed"
+                >
+                  Create Event
+                </span>
+              )
             ) : (
-              <span
-                title="Only creators can create events"
-                className="px-4 py-2 rounded-md bg-gray-300 text-gray-600 font-medium cursor-not-allowed"
+              <Link
+                href="/verify"
+                className="px-4 py-2 rounded-md bg-sanaa-orange text-white font-medium hover:bg-sanaa-orange/90"
               >
-                Create Event
-              </span>
+                Get Verified
+              </Link>
             )}
           </div>
         </div>
@@ -310,8 +324,8 @@ export default function MyProfilePage() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {loading ? (
                     <span className="text-xs text-gray-500">Loading…</span>
-                  ) : tags.length ? (
-                    tags.map((t) => (
+                  ) : (creative?.tags || []).length ? (
+                    (creative?.tags || []).map((t) => (
                       <span key={t} className="px-2.5 py-1 rounded-full bg-sanaa-orange/70 text-white text-xs">
                         {t}
                       </span>
@@ -377,7 +391,7 @@ export default function MyProfilePage() {
                         <div className="p-4">
                           <div className="text-sm font-semibold text-sanaa-orange">{ev.title || "Untitled event"}</div>
                           <div className="text-xs text-gray-600 mt-1">{fmtDate(ev.start_time)}</div>
-                          {ev.venue && <div className="text-xs text-gray-500">{ev.venue}</div>} 
+                          {ev.venue && <div className="text-xs text-gray-500">{ev.venue}</div>}
                         </div>
                         <div className="p-4 pt-0">
                           <Link

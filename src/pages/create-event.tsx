@@ -1,884 +1,743 @@
-// pages/signup.tsx
-import { useEffect, useMemo, useState, useRef } from "react";
+// pages/create-event.tsx
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Calendar, Clock } from "lucide-react";
+import { motion } from "framer-motion";
 import { useRouter } from "next/router";
-import Page from "@/components/Page";
+import type { SessionUser } from "@/components/Navbar";
 
-/* ------------------------------ TagInput ------------------------------ */
-function TagInput({
-  value,
-  onChange,
-  placeholder = "Add services (press Space or Enter)",
-  maxTags = 10,
-  maxLength = 24,
-}: {
-  value: string[];
-  onChange: (next: string[]) => void;
-  placeholder?: string;
-  maxTags?: number;
-  maxLength?: number;
-}) {
-  const [draft, setDraft] = useState("");
-
-  function commit(tagRaw: string) {
-    let t = tagRaw.trim();
-    if (!t) return;
-    t = t.replace(/[,\s]+/g, "-").replace(/[^a-zA-Z0-9-_]/g, "");
-    if (!t) return;
-    if (t.length > maxLength) t = t.slice(0, maxLength);
-    if (value.includes(t)) return;
-    if (value.length >= maxTags) return;
-    onChange([...value, t]);
-    setDraft("");
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" || e.key === " " || e.key === "Tab" || e.key === ",") {
-      e.preventDefault();
-      commit(draft);
-    } else if (e.key === "Backspace" && !draft && value.length) {
-      onChange(value.slice(0, -1));
-    }
-  }
-
-  function removeAt(i: number) {
-    const next = value.slice();
-    next.splice(i, 1);
-    onChange(next);
-  }
-
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700">Tags (optional)</label>
-      <div className="mt-1 w-full min-h-[42px] rounded-md border border-black/10 px-2 py-1.5 bg-white
-                      focus-within:ring-2 focus-within:ring-royal-purple/60 flex flex-wrap gap-1.5">
-        {value.map((t, i) => (
-          <span
-            key={`${t}-${i}`}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
-                       bg-royal-purple/10 text-royal-purple border border-royal-purple/20"
-          >
-            {t}
-            <button
-              type="button"
-              onClick={() => removeAt(i)}
-              className="rounded-full p-0.5 hover:bg-royal-purple/10"
-              aria-label={`Remove ${t}`}
-              title="Remove"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            </button>
-          </span>
-        ))}
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={value.length ? "" : placeholder}
-          className="flex-1 min-w-[140px] px-2 py-1 text-sm focus:outline-none bg-transparent"
-        />
-      </div>
-      <div className="mt-1 text-[11px] text-gray-500">
-        Separate with <span className="font-medium text-royal-purple">Space</span> or{" "}
-        <span className="font-medium text-royal-purple">Enter</span>. Up to {maxTags} tags.
-      </div>
-    </div>
-  );
+/* ------------------------------------------------------------------ */
+/* Direct-to-Django helpers                                            */
+/* ------------------------------------------------------------------ */
+function getCookie(name: string) {
+  if (typeof document === "undefined") return "";
+  const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return m ? decodeURIComponent(m[1]) : "";
 }
 
-/* ------------------------- CategorySelect ------------------------- */
-function CategorySelect({
-  value,
-  onChange,
-  options,
-  error,
-  label = "Category",
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  error?: boolean;
-  label?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState<number>(() =>
-    Math.max(0, options.findIndex((o) => o === value))
+const DJ = (process.env.NEXT_PUBLIC_DJANGO_API_BASE || "").replace(/\/+$/, "");
+if (!DJ) {
+  // eslint-disable-next-line no-console
+  console.warn("NEXT_PUBLIC_DJANGO_API_BASE is missing");
+}
+
+async function djFetch(path: string, init?: RequestInit) {
+  return fetch(`${DJ}${path}`, {
+    credentials: "include", // send cookies (JWT/Session)
+    ...init,
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Utility                                                             */
+/* ------------------------------------------------------------------ */
+function clsx(...classes: (string | false | null | undefined)[]) {
+  return classes.filter(Boolean).join(" ");
+}
+function parseTags(input: string): string[] {
+  return Array.from(
+    new Set(
+      (input || "")
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+    )
   );
-  const btnRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+}
+function formatMoneyKES(n: number) {
+  if (!Number.isFinite(n)) return "–";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "KES",
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    return `KES ${n.toLocaleString()}`;
+  }
+}
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (!open) return;
-      if (!menuRef.current) return;
-      if (
-        !menuRef.current.contains(e.target as Node) &&
-        !btnRef.current?.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (!open) return;
-      if (e.key === "Escape") {
-        setOpen(false);
-        btnRef.current?.focus();
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveIndex((i) => Math.min(options.length - 1, i + 1));
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveIndex((i) => Math.max(0, i - 1));
-      }
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        const choice = options[activeIndex] ?? options[0];
-        onChange(choice);
-        setOpen(false);
-        btnRef.current?.focus();
-      }
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey as any);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey as any);
-    };
-  }, [open, options, activeIndex, onChange]);
+/* ------------------------------------------------------------------ */
+/* Types                                                               */
+/* ------------------------------------------------------------------ */
+type TierKey = "regular" | "vip" | "vvip";
+type Tier = {
+  key: TierKey;
+  label: string;
+  enabled: boolean;
+  price: string;      // controlled input
+  allocation: string; // controlled input
+};
+type EventForm = {
+  title: string;
+  description: string;
+  venue: string;
+  start: string; // YYYY-MM-DDTHH:mm
+  end: string;   // YYYY-MM-DDTHH:mm
+  totalTickets: string;
+  coverFile?: File | null;
+  coverPreview?: string | null;
+  autoBalance: boolean;
+  tiers: Record<TierKey, Tier>;
+  tagsInput: string; // comma-separated -> JSON list
+};
+type ApiEvent = { id: number; slug: string; organizer_slug?: string | null };
 
-  useEffect(() => {
-    const idx = options.findIndex((o) => o === value);
-    if (idx >= 0) setActiveIndex(idx);
-  }, [value, options]);
-
+/* ------------------------------------------------------------------ */
+/* Summary card extracted so we can reuse it inside the success modal  */
+/* ------------------------------------------------------------------ */
+function EventSummaryCard({
+  form,
+  totalTicketsNum,
+  allocationSum,
+  remaining,
+  errors,
+}: {
+  form: EventForm;
+  totalTicketsNum: number;
+  allocationSum: number;
+  remaining: number;
+  errors: Record<string, string>;
+}) {
   return (
-    <div className="relative">
-      <label className="block text-sm font-medium text-gray-700">
-        {label} <span className="text-rose-500">*</span>
-      </label>
+    <div className="rounded-2xl border bg-white/70 p-4">
+      {/* Cover preview */}
+      <div className="rounded-xl overflow-hidden border bg-gray-50">
+        {form.coverPreview ? (
+          <img src={form.coverPreview} className="w-full h-40 object-cover" />
+        ) : (
+          <div className="h-40 grid place-items-center text-gray-400 text-sm">No cover selected</div>
+        )}
+      </div>
 
-      <button
-        type="button"
-        ref={btnRef}
-        onClick={() => setOpen((s) => !s)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className={`mt-1 w-full flex items-center justify-between rounded-md border px-3 py-2 text-left focus:outline-none focus:ring-2 ${
-          error
-            ? "border-rose-400 focus:ring-rose-300"
-            : "border-black/10 focus:ring-royal-purple/60"
-        } bg-white`}
-      >
-        <span className={value ? "text-gray-900" : "text-gray-400"}>
-          {value || "Select a category"}
-        </span>
-        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M6 9l6 6 6-6"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-        </svg>
-      </button>
+      {/* Basic info */}
+      <div className="mt-4 space-y-1">
+        <p className="font-bold text-base text-royal-purple">{form.title || "Untitled event"}</p>
+        <p className="text-sm text-gray-500">{form.venue || "Venue TBD"}</p>
+        <p className="text-xs text-gray-500">
+          {form.start ? new Date(form.start).toLocaleString() : "Start –"} →{" "}
+          {form.end ? new Date(form.end).toLocaleString() : "End –"}
+        </p>
+      </div>
 
-      {open && (
-        <div
-          ref={menuRef}
-          role="listbox"
-          tabIndex={-1}
-          className="absolute z-50 mt-2 w-full rounded-xl bg-white/80 backdrop-blur-md shadow-lg border border-black/10 overflow-hidden"
-        >
-          {options.map((opt, i) => {
-            const selected = opt === value;
-            const active = i === activeIndex;
-            return (
-              <button
-                key={opt}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                onMouseEnter={() => setActiveIndex(i)}
-                onClick={() => {
-                  onChange(opt);
-                  setOpen(false);
-                  btnRef.current?.focus();
-                }}
-                className={`w-full text-left px-4 py-2.5 text-sm transition ${
-                  active ? "bg-gray-50" : "bg-transparent"
-                } ${selected ? "font-semibold text-gray-900" : "text-gray-800"}`}
-              >
-                {opt}
-              </button>
-            );
-          })}
+      <hr className="my-3 border-gray-200" />
+
+      {/* Tickets overview */}
+      <div className="flex items-center justify-between text-sm">
+        <span>Total tickets</span>
+        <span className="font-semibold text-royal-purple">{totalTicketsNum || 0}</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span>Allocated</span>
+        <span className="font-semibold text-royal-purple">{allocationSum}</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span>Remaining</span>
+        <span className="px-2 py-0.5 rounded-full text-xs bg-royal-purple text-white">{remaining}</span>
+      </div>
+
+      {/* Tier chips */}
+      <div className="mt-3 grid gap-2 ">
+        {(["regular", "vip", "vvip"] as TierKey[]).map((key) => {
+          const t = form.tiers[key];
+          if (!t.enabled) return null;
+          const price = parseFloat(t.price || "0") || 0;
+          const alloc = parseInt(t.allocation || "0", 10) || 0;
+          return (
+            <div key={key} className="flex items-center justify-between rounded-xl border p-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center rounded-lg bg-royal-purple text-white px-2 py-0.5 text-xs font-medium">
+                  {t.label}
+                </span>
+                <span className="text-sm text-gray-500">{formatMoneyKES(price)}</span>
+              </div>
+              <span className="text-sm font-medium">{alloc} seats</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Projected revenue */}
+      <hr className="my-2 border-gray-200" />
+      <div className="flex items-center justify-between">
+        <p className="text-sm">Projected max revenue</p>
+        <p className="font-semibold text-royal-purple">
+          {formatMoneyKES(
+            (["regular", "vip", "vvip"] as TierKey[])
+              .filter((k) => form.tiers[k].enabled)
+              .reduce((acc, k) => {
+                const t = form.tiers[k];
+                const p = parseFloat(t.price || "0") || 0;
+                const a = parseInt(t.allocation || "0", 10) || 0;
+                return acc + p * a;
+              }, 0)
+          )}
+        </p>
+      </div>
+
+      {Object.keys(errors).length > 0 && (
+        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p className="font-medium mb-1">Fix the following:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            {Object.values(errors).map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
   );
 }
 
-/* ---------------------------------- Types ---------------------------------- */
-type FormState = {
-  name: string;
-  bio: string;
-  category: string;
-  subcategory: string;
-  location: string; // "City, Country"
-  website: string;
-  email: string;
-  profileFile: File | null;
-
-  password: string;
-  confirmPassword: string;
-
-  tags: string[];
-};
-type Errors = Partial<Record<keyof FormState | "password" | "confirmPassword", string>>;
-type StepKey = "account" | "profile" | "confirm";
-
-const CATEGORY_OPTIONS = [
-  "DJ",
-  "Artist",
-  "Studio",
-  "Photographer",
-  "Merchant",
-  "Singer",
-  "Rapper",
-  "Influencer",
-  "Other",
-];
-
-const STEPS: { id: StepKey; label: string }[] = [
-  { id: "account", label: "Account" },
-  { id: "profile", label: "Profile" },
-  { id: "confirm", label: "Confirm" },
-];
-
-// ---- choose your auth mode ----
-const AUTH_MODE: "jwt" | "session" = "jwt"; // default JWT to avoid CSRF hassles
-
-export default function SignUp() {
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+export default function CreateEventPage({ user }: { user: SessionUser }) {
   const router = useRouter();
+  const isCreative = Boolean((user as any)?.is_creator ?? true);
 
-  const [form, setForm] = useState<FormState>({
-    name: "",
-    bio: "",
-    category: "",
-    subcategory: "",
-    location: "",
-    website: "",
-    email: "",
-    profileFile: null,
-    password: "",
-    confirmPassword: "",
-    tags: [],
+  const [form, setForm] = useState<EventForm>({
+    title: "",
+    description: "",
+    venue: "",
+    start: "",
+    end: "",
+    totalTickets: "",
+    coverFile: null,
+    coverPreview: null,
+    autoBalance: true,
+    tagsInput: "",
+    tiers: {
+      regular: { key: "regular", label: "Regular", enabled: true, price: "", allocation: "" },
+      vip:     { key: "vip",     label: "VIP",     enabled: true, price: "", allocation: "" },
+      vvip:    { key: "vvip",    label: "VVIP",    enabled: false, price: "", allocation: "" },
+    },
   });
-  const [errors, setErrors] = useState<Errors>({});
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [dragActive, setDragActive] = useState(false);
-  const [step, setStep] = useState<StepKey>("account");
-  const [showSuccess, setShowSuccess] = useState(false);
 
-  // network state
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [createdEvent, setCreatedEvent] = useState<ApiEvent | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-    setErrors((e) => ({ ...e, [key]: undefined }));
-  }
-  const stepIndex = STEPS.findIndex((s) => s.id === step);
+  /* Derived values */
+  const totalTicketsNum = useMemo(
+    () => parseInt(form.totalTickets || "0", 10) || 0,
+    [form.totalTickets]
+  );
+  const allocationSum = useMemo(() => {
+    return Object.values(form.tiers)
+      .filter((t) => t.enabled)
+      .reduce((acc, t) => acc + (parseInt(t.allocation || "0", 10) || 0), 0);
+  }, [form.tiers]);
+  const remaining = useMemo(
+    () => Math.max(0, totalTicketsNum - allocationSum),
+    [allocationSum, totalTicketsNum]
+  );
+  const timeValid = useMemo(() => {
+    if (!form.start || !form.end) return true;
+    const start = new Date(form.start);
+    const end = new Date(form.end);
+    return start.getTime() < end.getTime();
+  }, [form.start, form.end]);
 
+  const canSubmit = useMemo(() => {
+    return (
+      !submitting &&
+      form.title.trim().length > 0 &&
+      form.venue.trim().length > 0 &&
+      timeValid &&
+      totalTicketsNum > 0 &&
+      allocationSum === totalTicketsNum &&
+      Object.values(form.tiers)
+        .filter((t) => t.enabled)
+        .every((t) => (parseFloat(t.price || "0") || 0) >= 0)
+    );
+  }, [form, allocationSum, timeValid, totalTicketsNum, submitting]);
+
+  /* Auto-balance allocation across enabled tiers */
   useEffect(() => {
-    if (!form.profileFile) {
-      setPreviewUrl(null);
+    if (!form.autoBalance) return;
+    if (totalTicketsNum <= 0) return;
+    const enabledTiers = Object.values(form.tiers).filter((t) => t.enabled);
+    if (enabledTiers.length === 0) return;
+
+    const currentAlloc = enabledTiers.map((t) => parseInt(t.allocation || "0", 10) || 0);
+    const sum = currentAlloc.reduce((a, b) => a + b, 0);
+    let diff = totalTicketsNum - sum;
+    if (diff === 0) return;
+
+    const base = Math.trunc(diff / enabledTiers.length);
+    let remainder = diff % enabledTiers.length;
+
+    setForm((prev) => {
+      const newTiers = { ...prev.tiers };
+      enabledTiers.forEach((tier) => {
+        const curr = parseInt(newTiers[tier.key].allocation || "0", 10) || 0;
+        let add = base;
+        if (remainder !== 0) {
+          add += remainder > 0 ? 1 : -1;
+          remainder += remainder > 0 ? -1 : 1;
+        }
+        const target = clamp(curr + add, 0, totalTicketsNum);
+        newTiers[tier.key] = { ...newTiers[tier.key], allocation: String(target) };
+      });
+      return { ...prev, tiers: newTiers };
+    });
+  }, [totalTicketsNum, form.autoBalance]);
+
+  function setTier<K extends keyof Tier>(key: TierKey, field: K, value: Tier[K]) {
+    setForm((prev) => ({ ...prev, tiers: { ...prev.tiers, [key]: { ...prev.tiers[key], [field]: value } } }));
+  }
+  function onFilePick(file?: File | null) {
+    if (!file) {
+      setForm((p) => ({ ...p, coverFile: null, coverPreview: null }));
       return;
     }
-    const url = URL.createObjectURL(form.profileFile);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [form.profileFile]);
+    const url = URL.createObjectURL(file);
+    setForm((p) => ({ ...p, coverFile: file, coverPreview: url }));
+  }
 
-  const emailValid = useMemo(
-    () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email || ""),
-    [form.email]
-  );
-  const locationValid = useMemo(
-    () => !form.location || /^[^,]+,\s*[^,]+$/.test(form.location || ""),
-    [form.location]
-  );
-  const websiteValid = useMemo(() => {
-    if (!form.website) return true;
-    try {
-      const withProto = form.website.startsWith("http")
-        ? form.website
-        : `https://${form.website}`;
-      const u = new URL(withProto);
-      return Boolean(u.hostname);
-    } catch {
-      return false;
+  function validate(): boolean {
+    const e: Record<string, string> = {};
+    if (!form.title.trim()) e.title = "Title is required";
+    if (!form.venue.trim()) e.venue = "Venue is required";
+    if (!timeValid) e.time = "End time must be after start time";
+    if (totalTicketsNum <= 0) e.totalTickets = "Enter total number of tickets";
+    if (allocationSum !== totalTicketsNum) e.allocation = "Ticket tier allocation must add up to total";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function createEvent(): Promise<ApiEvent> {
+    const tiersArray = (Object.keys(form.tiers) as TierKey[])
+      .map((k) => form.tiers[k])
+      .filter((t) => t.enabled)
+      .map((t) => ({
+        key: t.key,
+        price: Number(parseFloat(t.price || "0") || 0),
+        allocation: Number(parseInt(t.allocation || "0", 10) || 0),
+      }));
+
+    const payloadBase = {
+      title: form.title.trim(),
+      description: form.description.trim(),
+      venue: form.venue.trim(),
+      start_at: new Date(form.start).toISOString(),
+      end_at: new Date(form.end).toISOString(),
+      total_tickets: parseInt(form.totalTickets || "0", 10) || 0,
+      tiers: tiersArray,
+      tags: parseTags(form.tagsInput),
+    };
+
+    // CSRF (only if your Django checks CSRF for cookie-auth POST)
+    const csrf = getCookie("csrftoken");
+
+    let res: Response;
+    if (form.coverFile) {
+      const fd = new FormData();
+      fd.append("title", payloadBase.title);
+      fd.append("description", payloadBase.description);
+      fd.append("venue", payloadBase.venue);
+      fd.append("start_at", payloadBase.start_at);
+      fd.append("end_at", payloadBase.end_at);
+      fd.append("total_tickets", String(payloadBase.total_tickets));
+      fd.append("tiers", JSON.stringify(payloadBase.tiers));
+      fd.append("tags", JSON.stringify(payloadBase.tags));
+      fd.append("cover_image", form.coverFile); // field name matches your model
+
+      res = await djFetch(`/api/events/`, {
+        method: "POST",
+        headers: csrf ? { "X-CSRFToken": csrf } : undefined,
+        body: fd, // don't set Content-Type
+      });
+    } else {
+      res = await djFetch(`/api/events/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRFToken": csrf } : {}),
+        },
+        body: JSON.stringify(payloadBase),
+      });
     }
-  }, [form.website]);
 
-  // Password strength (0-4)
-  const pwScore = useMemo(() => {
-    const v = form.password || "";
-    let score = 0;
-    if (v.length >= 8) score++;
-    if (/[a-z]/.test(v) && /[A-Z]/.test(v)) score++;
-    if (/\d/.test(v)) score++;
-    if (/[^A-Za-z0-9]/.test(v)) score++;
-    return Math.min(score, 4);
-  }, [form.password]);
-
-  const pwStrengthLabel =
-    ["Very weak", "Weak", "Okay", "Good", "Strong"][pwScore] || "Very weak";
-  const pwBarWidth = `${(pwScore / 4) * 100}%`;
-
-  function validateStep(s: StepKey): boolean {
-    const next: Errors = {};
-    if (s === "account") {
-      if (!form.name.trim()) next.name = "Name is required.";
-      if (!form.email.trim()) next.email = "Email is required.";
-      else if (!emailValid) next.email = "Enter a valid email.";
-
-      if (!form.password) next.password = "Password is required.";
-      else if (form.password.length < 8) next.password = "Use at least 8 characters.";
-      if (!form.confirmPassword) next.confirmPassword = "Confirm your password.";
-      else if (form.password && form.confirmPassword !== form.password)
-        next.confirmPassword = "Passwords do not match.";
-    } else if (s === "profile") {
-      if (!form.category) next.category = "Select a category.";
-      if (form.location && !locationValid)
-        next.location = "Use City, Country (e.g., Nairobi, Kenya).";
-      if (form.website && !websiteValid)
-        next.website = "Enter a valid URL (e.g., https://example.com).";
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `Request failed with ${res.status}`);
     }
-    setErrors((prev) => ({ ...prev, ...next }));
-    return Object.keys(next).length === 0;
+    return (await res.json()) as ApiEvent;
   }
 
-  function canGoTo(target: StepKey): boolean {
-    const targetIdx = STEPS.findIndex((s) => s.id === target);
-    for (let i = 0; i < targetIdx; i++) {
-      const ok = validateStep(STEPS[i].id);
-      if (!ok) return false;
-    }
-    return true;
-  }
-
-  function goNext() {
-    const ok = validateStep(step);
-    if (!ok) return;
-    if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1].id);
-  }
-  function goBack() {
-    if (stepIndex > 0) setStep(STEPS[stepIndex - 1].id);
-  }
-
-  function onFileInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] || null;
-    setField("profileFile", file);
-  }
-  function onDrop(e: React.DragEvent<HTMLLabelElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const file = e.dataTransfer.files?.[0] || null;
-    setField("profileFile", file);
-  }
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!validateStep("account")) { setStep("account"); return; }
-    if (!validateStep("profile")) { setStep("profile"); return; }
-
-    const DJ = (process.env.NEXT_PUBLIC_DJANGO_API_BASE || "").replace(/\/+$/, "");
-    if (!DJ) {
-      setErrMsg("Signup is misconfigured: NEXT_PUBLIC_DJANGO_API_BASE is missing.");
-      return;
-    }
-
-    // endpoints (adjust if yours differ)
-    const REGISTER = `${DJ}/api/auth/creatives/register/`;
-    const SESSION_LOGIN = `${DJ}/api/auth/login/`;
-    const JWT_CREATE = `${DJ}/api/auth/token/`;
-    const PROFILE = `${DJ}/api/me/creative-profile/`;
+    setSubmitError(null);
+    setCreatedEvent(null);
+    if (!validate()) return;
 
     try {
       setSubmitting(true);
-      setErrMsg(null);
-
-      // 1) REGISTER
-      // NOTE: include 'category' (+ optional 'subcategory') because backend requires it.
-      // Do NOT send 'avatar' here; we send it in the profile PATCH.
-      const regFd = new FormData();
-      regFd.append("name", form.name);
-      regFd.append("email", form.email);
-      regFd.append("password", form.password);
-      regFd.append("category", form.category);
-      if (form.subcategory) regFd.append("subcategory", form.subcategory);
-
-      const regRes = await fetch(REGISTER, { method: "POST", body: regFd });
-      const regData = await regRes.json().catch(() => ({}));
-      if (!regRes.ok) {
-        throw new Error(regData?.detail || regData?.error || "Signup failed");
-      }
-
-      // 2) AUTHENTICATE (JWT preferred)
-      let authHeaders: Record<string, string> = {};
-      let fetchInitExtra: RequestInit = {};
-
-      if (AUTH_MODE === "jwt") {
-        const tokenRes = await fetch(JWT_CREATE, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: form.email, password: form.password }),
-        });
-        const tokenData = await tokenRes.json().catch(() => ({}));
-        if (!tokenRes.ok || !tokenData?.access) {
-          throw new Error(tokenData?.detail || "Could not obtain JWT");
-        }
-        authHeaders["Authorization"] = `Bearer ${tokenData.access}`;
-      } else {
-        const loginRes = await fetch(SESSION_LOGIN, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ email: form.email, password: form.password }),
-        });
-        const loginData = await loginRes.json().catch(() => ({}));
-        if (!loginRes.ok) throw new Error(loginData?.detail || "Login failed");
-        fetchInitExtra.credentials = "include";
-        // For CSRF-protected PATCH, add X-CSRFToken here if needed.
-      }
-
-      // 3) PATCH PROFILE (persist everything, including avatar)
-      const profFd = new FormData();
-      profFd.append("display_name", form.name);
-      profFd.append("category", form.category);
-      if (form.subcategory) profFd.append("subcategory", form.subcategory);
-      if (form.location) profFd.append("location", form.location);
-      if (form.website) profFd.append("website", form.website);
-      if (form.bio) profFd.append("bio", form.bio);
-      if (form.tags.length) profFd.append("tags", JSON.stringify(form.tags));
-      if (form.profileFile) profFd.append("avatar", form.profileFile, form.profileFile.name);
-
-      const profRes = await fetch(PROFILE, {
-        method: "PATCH",
-        headers: authHeaders,
-        body: profFd,
-        ...fetchInitExtra,
-      });
-      const profData = await profRes.json().catch(() => ({}));
-      if (!profRes.ok) {
-        if (AUTH_MODE === "session" && profRes.status === 403) {
-          throw new Error("Forbidden (CSRF). Add X-CSRFToken header or switch to JWT.");
-        }
-        throw new Error(profData?.detail || "Could not save profile");
-      }
-
-      setShowSuccess(true);
+      const created = await createEvent();
+      setCreatedEvent(created); // ← this triggers the success modal
     } catch (err: any) {
-      setErrMsg(err?.message || "Signup failed");
-      alert(err?.message || "Signup failed");
+      try {
+        const json = JSON.parse(err.message);
+        setSubmitError(typeof json === "object" ? JSON.stringify(json, null, 2) : String(err.message || "Failed to create event"));
+      } catch {
+        setSubmitError(String(err.message || "Failed to create event"));
+      }
     } finally {
       setSubmitting(false);
     }
   }
 
-  function closeSuccess() {
-    setShowSuccess(false);
-    router.push("/login");
+  /* Success modal close → redirect */
+  function goToCreatedEvent() {
+    if (createdEvent?.slug) {
+      router.push(`/events/${encodeURIComponent(createdEvent.slug)}`);
+    } else {
+      router.push("/events");
+    }
   }
 
+  /* ------------------------------------------------------------------ */
+  /* UI                                                                 */
+  /* ------------------------------------------------------------------ */
   return (
-    <Page>
-      <section className="max-w-3xl mx-auto px-4 py-10">
-        <div>
-          <h3 className="text-2xl font-semibold">Join Sanaa Hive</h3>
-          <p className="mt-2 text-black/90 max-w-xl">
-            Create your profile, showcase your craft, and connect with the
-            Nairobi creative scene.
-          </p>
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold">Create Event</h1>
+        <p className="text-gray-500 mt-1">
+          Draft your event details. Ticket generation & QR validation will come later.
+        </p>
+      </div>
+
+      {!isCreative ? (
+        <div className="rounded-2xl border bg-yellow-50 p-6 text-yellow-900">
+          You must be a <strong>Creative</strong> to create events.
         </div>
-
-        {/* Stepper */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            {STEPS.map((s, i) => {
-              const active = step === s.id;
-              const past = i < stepIndex;
-              return (
-                <div key={s.id} className="flex items-center gap-3">
-                  <button
-                    onClick={() => { if (past || canGoTo(s.id)) setStep(s.id); }}
-                    className={`h-8 w-8 rounded-full grid place-items-center text-sm font-semibold transition
-                      ${active ? "bg-sanaa-orange text-white"
-                        : past ? "bg-sanaa-orange/10 text-sanaa-orange"
-                        : "bg-gray-100 text-gray-600"}`}
-                    aria-current={active ? "step" : undefined}
-                  >
-                    {i + 1}
-                  </button>
-                  <div className={`text-sm ${active ? "text-sanaa-orange font-semibold" : "text-gray-600"}`}>
-                    {s.label}
-                  </div>
-                  {i < STEPS.length - 1 && (
-                    <div className="h-[2px] w-8 rounded-full bg-black/10" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <span className="text-xs px-2.5 py-1 rounded-full bg-royal-purple text-white">
-            Step {stepIndex + 1} of {STEPS.length}
-          </span>
-        </div>
-
-        {/* Card */}
-        <form onSubmit={onSubmit} className="bg-white rounded-xl shadow p-6 md:p-8 space-y-6">
-          {step === "account" && (
-            <>
-              <h2 className="text-lg font-semibold text-sanaa-orange">Account</h2>
-
-              {/* Name & Email */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    value={form.name}
-                    onChange={(e) => setField("name", e.target.value)}
-                    placeholder="Asha Kamau"
-                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                      errors.name ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
-                    }`}
-                  />
-                  {errors.name && <p className="mt-1 text-xs text-rose-600">{errors.name}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Email <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setField("email", e.target.value)}
-                    placeholder="you@example.com"
-                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                      errors.email ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
-                    }`}
-                  />
-                  {errors.email && <p className="mt-1 text-xs text-rose-600">{errors.email}</p>}
-                </div>
-              </div>
-
-              {/* Password & Confirm Password */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Password <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setField("password", e.target.value)}
-                    placeholder="••••••••"
-                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                      errors.password ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
-                    }`}
-                  />
-                  {/* Strength gauge */}
-                  <div className="mt-2">
-                    <div className="h-1.5 w-full rounded-full bg-verylight-purple/60">
-                      <div
-                        className="h-1.5 rounded-full bg-royal-purple transition-all"
-                        style={{ width: pwBarWidth }}
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <div className="mt-1 text-[11px] text-gray-600">
-                      Strength: <span className="text-royal-purple font-medium">{pwStrengthLabel}</span>
-                    </div>
-                  </div>
-                  {errors.password && <p className="mt-1 text-xs text-rose-600">{errors.password}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Confirm Password <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    value={form.confirmPassword}
-                    onChange={(e) => setField("confirmPassword", e.target.value)}
-                    placeholder="••••••••"
-                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                      errors.confirmPassword ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
-                    }`}
-                  />
-                  {errors.confirmPassword && (
-                    <p className="mt-1 text-xs text-rose-600">{errors.confirmPassword}</p>
-                  )}
-                </div>
-              </div>
-
-              {errMsg && (
-                <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
-                  {errMsg}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={goNext}
-                  className="px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90"
-                >
-                  Continue
-                </button>
-              </div>
-            </>
-          )}
-
-          {step === "profile" && (
-            <>
-              <h2 className="text-lg font-semibold text-gray-900">Profile</h2>
-
-              {/* Avatar uploader */}
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Form */}
+          <div className="lg:col-span-2 bg-white/70 rounded-2xl border p-6">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Profile picture (optional)
-                </label>
-                <label
-                  onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-                  onDragLeave={() => setDragActive(false)}
-                  onDrop={onDrop}
-                  className={`mt-2 flex items-center gap-4 p-4 rounded-xl border-2 border-dashed transition cursor-pointer ${
-                    dragActive ? "border-royal-purple bg-royal-purple/5" : "border-black/10 hover:bg-gray-50"
-                  }`}
-                >
-                  <input type="file" accept="image/*" className="hidden" onChange={onFileInput} />
-                  <div className="h-16 w-16 rounded-full ring-2 ring-royal-purple/30 overflow-hidden bg-gray-100 grid place-items-center">
-                    {previewUrl ? (
-                      <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      </svg>
-                    )}
-                  </div>
-                  <div className="text-sm">
-                    <div className="font-medium text-gray-900">Upload or drop an image</div>
-                    <div className="text-gray-600">PNG/JPG up to ~2MB recommended</div>
-                  </div>
-                </label>
+                <label htmlFor="title" className="block text-sm font-medium">Title</label>
+                <input
+                  id="title"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                  placeholder="e.g., Soulful Sundays: Live at The Garden"
+                  value={form.title}
+                  onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
+                />
+                {errors.title && <p className="mt-1 text-sm text-red-600">{errors.title}</p>}
               </div>
 
-              {/* Category & Subcategory */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <CategorySelect
-                    value={form.category}
-                    onChange={(v) => setField("category", v)}
-                    options={CATEGORY_OPTIONS}
-                    error={Boolean(errors.category)}
-                    label="Category"
-                  />
-                  {errors.category && (
-                    <p className="mt-1 text-xs text-rose-600">{errors.category}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Subcategory (optional)</label>
-                  <input
-                    value={form.subcategory}
-                    onChange={(e) => setField("subcategory", e.target.value)}
-                    placeholder="e.g., DJ, Studio, Street Photographer"
-                    className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 border-black/10 focus:ring-royal-purple/60"
-                  />
-                </div>
-              </div>
-
-              {/* Location & Website */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Location <span className="text-xs text-gray-500">(City, Country)</span>
-                  </label>
-                  <input
-                    value={form.location}
-                    onChange={(e) => setField("location", e.target.value)}
-                    placeholder="Nairobi, Kenya"
-                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                      errors.location ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
-                    }`}
-                  />
-                  {errors.location && <p className="mt-1 text-xs text-rose-600">{errors.location}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Website (optional)
-                  </label>
-                  <input
-                    value={form.website}
-                    onChange={(e) => setField("website", e.target.value)}
-                    placeholder="https://example.com"
-                    className={`mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
-                      errors.website ? "border-rose-400 focus:ring-rose-300" : "border-black/10 focus:ring-royal-purple/60"
-                    }`}
-                  />
-                  {errors.website && <p className="mt-1 text-xs text-rose-600">{errors.website}</p>}
-                </div>
-              </div>
-
-              {/* Bio */}
+              {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Bio (optional)</label>
+                <label htmlFor="description" className="block text-sm font-medium">Description</label>
                 <textarea
-                  value={form.bio}
-                  onChange={(e) => setField("bio", e.target.value)}
-                  placeholder="Tell us a bit about your creative practice…"
-                  rows={4}
-                  className="mt-1 w-full rounded-md border border-black/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple/60"
+                  id="description"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                  rows={5}
+                  placeholder="Tell attendees what to expect..."
+                  value={form.description}
+                  onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
                 />
               </div>
 
-              {/* Tags */}
-              <TagInput
-                value={form.tags}
-                onChange={(tags) => setField("tags", tags)}
-                placeholder="AfroHouse mixing events photography"
-                maxTags={10}
-                maxLength={24}
-              />
-
-              {errMsg && (
-                <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
-                  {errMsg}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={goBack}
-                  className="px-4 py-2 rounded-full bg-sanaa-orange text-white border border-black/10 hover:bg-sanaa-orange/90"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={goNext}
-                  className="px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90"
-                >
-                  Continue
-                </button>
-              </div>
-            </>
-          )}
-
-          {step === "confirm" && (
-            <>
-              <h2 className="text-lg font-semibold text-gray-900">Confirm</h2>
-              <div className="rounded-lg border border-black/10 divide-y">
-                <Row label="Name" value={form.name || "—"} />
-                <Row label="Email" value={form.email || "—"} />
-                <Row label="Category" value={form.category || "—"} />
-                <Row label="Subcategory" value={form.subcategory || "—"} />
-                <Row label="Location" value={form.location || "—"} />
-                <Row label="Website" value={form.website || "—"} />
-                <Row label="Bio" value={form.bio || "—"} />
-                <Row label="Tags" value={form.tags.length ? form.tags.join(", ") : "—"} />
+              {/* Venue */}
+              <div>
+                <label htmlFor="venue" className="block text-sm font-medium">Venue</label>
+                <input
+                  id="venue"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                  placeholder="Venue name • City, Country"
+                  value={form.venue}
+                  onChange={(e) => setForm((p) => ({ ...p, venue: e.target.value }))}
+                />
+                {errors.venue && <p className="mt-1 text-sm text-red-600">{errors.venue}</p>}
               </div>
 
-              {errMsg && (
-                <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
-                  {errMsg}
+              {/* Start / End */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="relative">
+                  <label htmlFor="start" className="block text-sm font-medium">Start time</label>
+                  <Clock className="pointer-events-none absolute left-3 top-9 h-4 w-4 text-gray-400" />
+                  <input
+                    id="start"
+                    type="datetime-local"
+                    className="mt-1 w-full rounded-xl border pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                    value={form.start}
+                    onChange={(e) => setForm((p) => ({ ...p, start: e.target.value }))}
+                  />
                 </div>
-              )}
+                <div className="relative">
+                  <label htmlFor="end" className="block text_sm font-medium">End time</label>
+                  <Calendar className="pointer-events-none absolute left-3 top-9 h-4 w-4 text-gray-400" />
+                  <input
+                    id="end"
+                    type="datetime-local"
+                    className="mt-1 w-full rounded-xl border pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                    value={form.end}
+                    onChange={(e) => setForm((p) => ({ ...p, end: e.target.value }))}
+                  />
+                </div>
+              </div>
+              {!timeValid && <p className="text-sm text-red-600">End time must be after start time.</p>}
 
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={goBack}
-                  className="px-4 py-2 rounded-full bg-sanaa-orange text-white border border-black/10 hover:bg-sanaa-orange/90"
+              {/* Cover Image */}
+              <div>
+                <span className="block text-sm font-medium">Cover image</span>
+                <div
+                  className={clsx(
+                    "mt-1 border-2 border-dashed rounded-2xl p-6 flex items-center justify-between gap-4",
+                    form.coverPreview ? "border-gray-200" : "border-gray-300/70"
+                  )}
                 >
-                  Back
-                </button>
+                  <div className="flex items-center gap-4">
+                    {form.coverPreview ? (
+                      <img src={form.coverPreview} alt="Cover preview" className="h-20 w-32 object-cover rounded-lg" />
+                    ) : (
+                      <div className="h-20 w-32 grid place-items-center bg-gray-100 rounded-lg text-sm text-gray-500">
+                        No image
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">Upload a cover (JPG/PNG, ≤ 5MB)</p>
+                      <p className="text-xs text-gray-500">Recommended 1200×600px. Appears on listings & event page.</p>
+                      <div className="flex gap-3 mt-3">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-3 py-2 rounded-lg border bg-sanaa-orange text-white hover:bg-sanaa-orange/70"
+                        >
+                          Choose file
+                        </button>
+                        {form.coverFile && (
+                          <button
+                            type="button"
+                            onClick={() => onFilePick(null)}
+                            className="px-3 py-2 rounded-lg border bg-sanaa-orange text-white hover:bg-sanaa-orange/70"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f && f.size > 5 * 1024 * 1024) {
+                      alert("File too large. Max 5MB.");
+                      return;
+                    }
+                    onFilePick(f || null);
+                  }}
+                />
+              </div>
+
+              <hr className="border-gray-200" />
+
+              {/* Tickets */}
+              <div>
+                <label htmlFor="totalTickets" className="block text-sm font-medium">Total tickets</label>
+                <div className="mt-1">
+                  <input
+                    id="totalTickets"
+                    inputMode="numeric"
+                    className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                    placeholder="e.g., 500"
+                    value={form.totalTickets}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, "");
+                      setForm((p) => ({ ...p, totalTickets: v }));
+                    }}
+                  />
+                </div>
+                {errors.totalTickets && <p className="mt-1 text-sm text-red-600">{errors.totalTickets}</p>}
+              </div>
+
+              {/* Tags (optional) */}
+              <div>
+                <label htmlFor="tags" className="block text-sm font-medium">Tags (optional)</label>
+                <input
+                  id="tags"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                  placeholder="e.g., music, nairobi, live"
+                  value={form.tagsInput}
+                  onChange={(e) => setForm((p) => ({ ...p, tagsInput: e.target.value }))}
+                />
+                <p className="mt-1 text-xs text-gray-500">Comma-separated. Stored as a JSON list on the event.</p>
+              </div>
+
+              {/* Auto-balance toggle */}
+              <div className="flex items-center justify-between rounded-xl border p-3 bg-gray-50">
+                <div>
+                  <p className="text-sm font-medium">Auto-balance tier allocation</p>
+                  <p className="text-xs text-gray-500">Evenly distribute remaining tickets across enabled tiers.</p>
+                </div>
+                <label className="inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={form.autoBalance}
+                    onChange={(e) => setForm((p) => ({ ...p, autoBalance: e.target.checked }))}
+                  />
+                  <span className="h-6 w-11 rounded-full bg-gray-300 peer-checked:bg-sanaa-orange relative transition-colors">
+                    <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+                  </span>
+                </label>
+              </div>
+
+              {/* Tier table */}
+              <div className="rounded-2xl border overflow-hidden">
+                <div className="grid grid-cols-12 bg-gray-50 px-4 py-3 text-sm font-medium">
+                  <div className="col-span-3">Tier</div>
+                  <div className="col-span-3">Price (KES)</div>
+                  <div className="col-span-3">Allocation</div>
+                  <div className="col-span-3 text-right">Enabled</div>
+                </div>
+
+                {(["regular", "vip", "vvip"] as TierKey[]).map((key) => {
+                  const tier = form.tiers[key];
+                  return (
+                    <div key={key} className="grid grid-cols-12 items-center px-4 py-3 border-t">
+                      <div className="col-span-3 font-medium">{tier.label}</div>
+                      <div className="col-span-3">
+                        <input
+                          inputMode="numeric"
+                          placeholder="e.g., 1500"
+                          className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                          value={tier.price}
+                          onChange={(e) => setTier(key, "price", e.target.value.replace(/[^0-9.]/g, ""))}
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          inputMode="numeric"
+                          placeholder="e.g., 300"
+                          className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple"
+                          value={tier.allocation}
+                          onChange={(e) => setTier(key, "allocation", e.target.value.replace(/[^0-9]/g, ""))}
+                        />
+                      </div>
+                      <div className="col-span-3 flex justify-end">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 accent-sanaa-orange"
+                          checked={tier.enabled}
+                          onChange={(e) => setTier(key, "enabled", e.target.checked)}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {errors.allocation && <p className="mt-1 text-sm text-red-600">{errors.allocation}</p>}
+
+              {/* Submit */}
+              <div className="flex items-center gap-3">
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className={`px-5 py-2 rounded-full bg-royal-purple text-white font-semibold hover:bg-royal-purple/90 ${
-                    submitting ? "opacity-70 cursor-not-allowed" : ""
-                  }`}
+                  disabled={!canSubmit}
+                  className={clsx(
+                    "px-6 py-2 rounded-xl text-white",
+                    canSubmit ? "bg-black hover:bg-neutral-800" : "bg-gray-400 cursor-not-allowed"
+                  )}
                 >
-                  {submitting ? "Creating..." : "Create Account"}
+                  {submitting ? "Creating..." : "Save draft"}
                 </button>
+                {submitError && <span className="text-xs text-red-600 break-all">{submitError}</span>}
               </div>
-              <p className="text-xs text-gray-500">
-                By creating an account, you agree to our Terms & Privacy Policy.
-              </p>
-            </>
-          )}
-        </form>
-      </section>
+            </form>
+          </div>
+
+          {/* Right: Live Summary */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-5"
+          >
+            <EventSummaryCard
+              form={form}
+              totalTicketsNum={totalTicketsNum}
+              allocationSum={allocationSum}
+              remaining={remaining}
+              errors={errors}
+            />
+          </motion.div>
+        </div>
+      )}
 
       {/* Success Modal */}
-      {showSuccess && (
+      {createdEvent && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="absolute inset-0 bg-black/50" onClick={closeSuccess} />
-          <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div className="px-5 py-6">
-              <div className="mx-auto h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          {/* overlay */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={goToCreatedEvent}
+            aria-hidden="true"
+          />
+          {/* modal */}
+          <div className="relative z-10 w-full max-w-3xl bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Event created successfully</h3>
+              <button
+                onClick={goToCreatedEvent}
+                aria-label="Close"
+                className="rounded-full p-2 hover:bg-gray-100"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
-              </div>
-              <h3 className="mt-4 text-lg font-semibold text-gray-900 text-center">
-                Registration successful
-              </h3>
-              <p className="mt-2 text-sm text-gray-700 text-center">
-                You can now log in and complete your profile.
-              </p>
-              <div className="mt-5 flex items-center justify-center">
+              </button>
+            </div>
+
+            <div className="px-5 py-5 grid md:grid-cols-2 gap-5">
+              <div>
+                <p className="text-sm text-gray-700">
+                  Your event has been created. You can review it now.
+                </p>
+                <div className="mt-3 text-sm">
+                  <div className="text-gray-600">Slug</div>
+                  <div className="font-semibold text-royal-purple break-all">{createdEvent.slug}</div>
+                </div>
                 <button
-                  onClick={closeSuccess}
-                  className="px-4 py-2 rounded-full bg-royal-purple text-white font-medium hover:bg-royal-purple/90"
+                  onClick={goToCreatedEvent}
+                  className="mt-5 inline-flex items-center justify-center px-4 py-2 rounded-md bg-sanaa-orange text-white font-medium hover:opacity-90"
                 >
-                  Go to Login
+                  View event
                 </button>
               </div>
+
+              {/* Reuse the same summary card in the modal */}
+              <EventSummaryCard
+                form={form}
+                totalTicketsNum={totalTicketsNum}
+                allocationSum={allocationSum}
+                remaining={remaining}
+                errors={{}} // show a clean card in success
+              />
             </div>
           </div>
         </div>
       )}
-    </Page>
-  );
-}
-
-/* ------------------------------- Row component ------------------------------ */
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4 px-4 py-3">
-      <div className="text-sm text-gray-600">{label}</div>
-      <div className="text-sm font-medium text-gray-900 text-right max-w-[70%] break-words">
-        {value}
-      </div>
     </div>
   );
 }

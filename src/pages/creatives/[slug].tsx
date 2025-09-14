@@ -27,10 +27,20 @@ type EventItem = {
 
 const images_url = (process.env.NEXT_PUBLIC_MEDIA_BASE || "http://localhost:8000").replace(/\/+$/, "");
 
-function Badge({ text }: { text: string }) {
-  const t = (text || "").toLowerCase();
-  const classes = t.includes("verified") ? "bg-emerald-500 text-white" : "bg-gray-200 text-gray-700";
-  return <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${classes}`}>{text}</span>;
+// Verified-only badge with icon
+function VerifiedBadge() {
+  return (
+    <span className="inline-flex items-center gap-0">
+      <img
+        src="/verified-badge.png"
+        alt="Verified"
+        className="h-8 w-8"
+      />
+      <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-royal-purple text-white">
+        Verified
+      </span>
+    </span>
+  );
 }
 
 export default function PublicCreativeProfile() {
@@ -147,7 +157,8 @@ export default function PublicCreativeProfile() {
               <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">
                 {loading ? "Loading…" : stageName}
               </h1>
-              {!loading && <Badge text={isVerified ? "Verified" : "Not Verified"} />}
+              {/* Show verified badge ONLY when verified */}
+              {!loading && isVerified && <VerifiedBadge />}
             </div>
 
             {!loading && (

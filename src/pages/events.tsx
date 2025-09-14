@@ -17,6 +17,9 @@ type EventAPI = {
   tags?: string[];
   cover_url?: string;    // may be relative to MEDIA_URL
   organizer_slug?: string;
+
+  // Optional if added in serializer (organizer display_name)
+  organizer_name?: string;
 };
 
 /** --- Card adapter type --- */
@@ -31,13 +34,15 @@ type EventItem = {
   ticketUrl?: string;
   badge?: string;               // show status if not Published (optional)
   tags: string[];               // for chips filtering
+  organizerName?: string;       // display on card
+  organizerUrl?: string;        // /creatives/[slug]
 };
 
 function normalize(s: string) {
   return (s || "")
     .toLowerCase()
     .normalize("NFD")
-    // @ts-ignore – unicode property escapes
+    // @ts-ignore – unicode property escapes (ok in modern TS/Node)
     .replace(/\p{Diacritic}/gu, "");
 }
 
@@ -47,6 +52,15 @@ function toImageSrc(cover_url?: string): string {
   if (/^(https?:)?\/\//i.test(v) || /^data:/i.test(v)) return v;
   const base = (process.env.NEXT_PUBLIC_MEDIA_BASE || "http://localhost:8000").replace(/\/+$/, "");
   return `${base}/${v.replace(/^\/+/, "")}`;
+}
+
+// prettify "my-cool-slug" -> "My Cool Slug"
+function nameFromSlug(slug?: string) {
+  if (!slug) return "";
+  return slug
+    .split(/[-_]+/)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
 }
 
 export default function Events() {
@@ -78,16 +92,23 @@ export default function Events() {
         const data: EventAPI[] = Array.isArray(body) ? body : (body.results || []);
 
         // Map into EventCard-friendly shape (no status filtering)
-        const mapped: EventItem[] = (data || []).map((e) => ({
-          slug: e.slug,
-          title: e.title || "Untitled Event",
-          date: e.start_time ?? new Date().toISOString(),  // ensure string|Date
-          venue: e.venue,
-          description: e.description || "",
-          image: toImageSrc(e.cover_url),
-          badge: e.status && e.status !== "Published" ? e.status : undefined,
-          tags: Array.isArray(e.tags) ? e.tags : [],
-        }));
+        const mapped: EventItem[] = (data || []).map((e) => {
+          const organizerName = e.organizer_name || nameFromSlug(e.organizer_slug);
+          const organizerUrl = e.organizer_slug ? `/creatives/${encodeURIComponent(e.organizer_slug)}` : undefined;
+
+          return {
+            slug: e.slug,
+            title: e.title || "Untitled Event",
+            date: e.start_time ?? new Date().toISOString(),  // ensure string|Date
+            venue: e.venue,
+            description: e.description || "",
+            image: toImageSrc(e.cover_url),
+            badge: e.status && e.status !== "Published" ? e.status : undefined,
+            tags: Array.isArray(e.tags) ? e.tags : [],
+            organizerName,
+            organizerUrl,
+          };
+        });
 
         // Build dynamic tag chips
         const uniqTags = Array.from(
@@ -108,7 +129,7 @@ export default function Events() {
     return () => { mounted = false; };
   }, []); // initial load only
 
-  // Filter by tag chip + search
+  // Filter by tag chip + search (title or organizer)
   const filtered = useMemo(() => {
     const nq = normalize(q);
     const nt = normalize(tag);
@@ -118,7 +139,9 @@ export default function Events() {
         const has = (e.tags || []).some((t) => normalize(t) === nt);
         if (!has) return false;
       }
-      return normalize(e.title).includes(nq);
+      const matchTitle = normalize(e.title).includes(nq);
+      const matchOrg = normalize(e.organizerName || "").includes(nq);
+      return matchTitle || matchOrg;
     });
   }, [q, tag, items]);
 
@@ -139,7 +162,7 @@ export default function Events() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search events"
+              placeholder="Search events (title or organizer)"
               className="w-full rounded-full bg-white/80 border border-black/10 py-2 pl-10 pr-10 shadow-sm focus:outline-none focus:ring-2 focus:ring-sanaa-orange/60"
             />
             {q && (
@@ -160,15 +183,15 @@ export default function Events() {
         <div className="flex flex-wrap gap-2 mb-6">
           {tags.map((t) => (
             <button
-              key={t}
-              onClick={() => setTag(t)}
-              className={`px-3 py-1.5 rounded-full border text-sm transition ${
+            key={t}
+            onClick={() => setTag(t)}
+            className={`px-3 py-1.5 rounded-full border border-transparent text-sm font-semibold text-white transform-gpu transition-transform duration-150 ${
                 tag === t
-                  ? "bg-sanaa-orange text-white border-sanaa-orange"
-                  : "bg-white text-gray-700 border-black/10 hover:bg-gray-50"
-              }`}
+                ? "bg-royal-purple hover:scale-105"
+                : "bg-sanaa-orange hover:bg-gradient-to-r from-royal-purple/90 via-royal-purple/50 to-sanaa-orange/90 hover:scale-105"
+            }`}
             >
-              {t}
+            {t}
             </button>
           ))}
         </div>
@@ -188,7 +211,7 @@ export default function Events() {
               {filtered.map((e) => (
                 <EventCard
                   key={e.slug}
-                  slug={e.slug}               // routes CTA to /events/[slug]
+                  slug={e.slug}
                   title={e.title}
                   date={e.date}               // guaranteed string|Date
                   venue={e.venue || ""}
@@ -197,6 +220,8 @@ export default function Events() {
                   price={e.price}
                   ticketUrl={e.ticketUrl}     // ignored if slug present
                   badge={e.badge}
+                  organizerName={e.organizerName}  // NEW
+                  organizerUrl={e.organizerUrl}    // NEW
                 />
               ))}
             </div>

@@ -15,7 +15,7 @@ module.exports = {
           200:"#c9aef3ff",
         },
         "sanaa-orange": "#d13841",
-        "verylight-purple" : "#c9aef3ff",
+        "verylight-purple" : "#c9aef3ff"
       },
     },
   },

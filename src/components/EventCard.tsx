@@ -11,7 +11,9 @@ type EventCardProps = {
   onBuy?: () => void;          // fallback handler if no ticketUrl
   ctaLabel?: string;           // default: "Buy Ticket"
   badge?: string;              // e.g. "Sold Out" | "New" | "Hot"
-  slug?: string;               // NEW: when present, CTA goes to /events/[slug]
+  slug?: string;               // when present, CTA goes to /events/[slug]
+  organizerName?: string;      // NEW: organizer display
+  organizerUrl?: string;       // NEW: link to /creatives/[slug], optional
 };
 
 function formatDate(d: string | Date) {
@@ -50,7 +52,9 @@ export default function EventCard({
   onBuy,
   ctaLabel = "Buy Ticket",
   badge,
-  slug, // NEW
+  slug,
+  organizerName,   // NEW
+  organizerUrl,    // NEW
 }: EventCardProps) {
   const isSoldOut = badge?.toLowerCase().includes("sold");
 
@@ -63,6 +67,7 @@ export default function EventCard({
             className="relative w-full max-w-[750px] max-h-[350px] overflow-hidden"
             style={{ aspectRatio: "15 / 7" }} // ~750x350 ratio
           >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={image}
               alt={title}
@@ -97,6 +102,20 @@ export default function EventCard({
               </div>
             )}
           </div>
+
+          {/* Organizer (NEW) */}
+          {organizerName && (
+            <div className="mt-1 text-xs text-gray-600">
+              by{" "}
+              {organizerUrl ? (
+                <Link href={organizerUrl} className="text-sanaa-orange hover:underline">
+                  {organizerName}
+                </Link>
+              ) : (
+                <span className="text-gray-800">{organizerName}</span>
+              )}
+            </div>
+          )}
 
           {/* Meta: Date + Venue */}
           <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-600">

@@ -1,10 +1,23 @@
 // components/Navbar.tsx
 "use client";
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 export type SessionUser = { id: number; username: string; email: string } | null;
+
+const DEFAULT_AVATAR = "/assets/navbar/user.png";
+const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE || "http://localhost:8000").replace(/\/+$/, "");
+
+function toImageSrc(raw?: string): string {
+  const v = (raw || "").trim();
+  if (!v) return DEFAULT_AVATAR;
+  if (/^(https?:)?\/\//i.test(v) || /^data:/i.test(v)) return v;
+  return `${MEDIA_BASE}/${v.replace(/^\/+/, "")}`;
+}
+
+type SearchCreative = { slug: string; display_name: string };
+type SearchEvent = { slug: string; title: string };
 
 export default function Navbar({ user }: { user: SessionUser }) {
   const pathname = usePathname();
@@ -13,13 +26,27 @@ export default function Navbar({ user }: { user: SessionUser }) {
   const [isOpen, setIsOpen] = useState(false);
   const [show, setShow] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+
+  // Search state
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchErr, setSearchErr] = useState<string | null>(null);
+  const [results, setResults] = useState<{ events: SearchEvent[]; creatives: SearchCreative[] }>({
+    events: [],
+    creatives: [],
+  });
 
   // Profile dropdown
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLDivElement | null>(null);
 
-  // Hide/show on scroll
+  // Avatar state
+  const isAuthed = Boolean(user);
+  const [avatarSrc, setAvatarSrc] = useState<string>(DEFAULT_AVATAR);
+
+  /* ---------------- Hide/show on scroll ---------------- */
   useEffect(() => {
     const handleScroll = () => {
       const curr = window.scrollY;
@@ -31,20 +58,24 @@ export default function Navbar({ user }: { user: SessionUser }) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [lastScrollY, isOpen]);
 
-  // Close dropdown on route change
+  /* ---------------- Close dropdown on route change ---------------- */
   useEffect(() => {
     setMenuOpen(false);
+    setSearchOpen(false);
   }, [pathname]);
 
-  // Close on outside click + Esc
+  /* ---------------- Close menus on outside click + Esc ---------------- */
   useEffect(() => {
-    if (!menuOpen) return;
     const onClick = (e: MouseEvent) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      const t = e.target as Node;
+      if (menuOpen && menuRef.current && !menuRef.current.contains(t)) setMenuOpen(false);
+      if (searchOpen && searchRef.current && !searchRef.current.contains(t)) setSearchOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setSearchOpen(false);
+      }
     };
     window.addEventListener("mousedown", onClick);
     window.addEventListener("keydown", onKey);
@@ -52,16 +83,150 @@ export default function Navbar({ user }: { user: SessionUser }) {
       window.removeEventListener("mousedown", onClick);
       window.removeEventListener("keydown", onKey);
     };
-  }, [menuOpen]);
+  }, [menuOpen, searchOpen]);
 
+  /* ---------------- Logout ---------------- */
   async function handleLogout() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-    } catch {
-      // ignore errors
-    }
-    router.replace("/"); // redirect home
+    } catch {}
+    router.replace("/");
     setMenuOpen(false);
+  }
+
+  /* ---------------- Load avatar for authed user ---------------- */
+  useEffect(() => {
+    let mounted = true;
+    if (!isAuthed) {
+      setAvatarSrc(DEFAULT_AVATAR);
+      return;
+    }
+    (async () => {
+      try {
+        let a: string | undefined;
+        const r1 = await fetch("/api/me/creative-profile/", { cache: "no-store" });
+        const j1 = await r1.json().catch(() => ({}));
+        if (r1.ok && j1?.avatar_url) {
+          a = j1.avatar_url;
+        } else {
+          const r2 = await fetch("/api/me/profile", { cache: "no-store" });
+          const j2 = await r2.json().catch(() => ({}));
+          if (r2.ok && j2?.avatar_url) a = j2.avatar_url;
+        }
+        if (!mounted) return;
+        setAvatarSrc(toImageSrc(a));
+      } catch {
+        if (!mounted) return;
+        setAvatarSrc(DEFAULT_AVATAR);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [isAuthed]);
+
+  /* ---------------- Debounced search ---------------- */
+  const minChars = 2;
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < minChars) {
+      setSearchOpen(false);
+      setResults({ events: [], creatives: [] });
+      setSearchErr(null);
+      return;
+    }
+    setSearchOpen(true);
+    setSearchLoading(true);
+    setSearchErr(null);
+
+    const ctrl = new AbortController();
+    const id = setTimeout(async () => {
+      try {
+        // 1) Try a unified backend search
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+          cache: "no-store",
+          signal: ctrl.signal,
+        });
+        if (r.ok) {
+          const j = await r.json();
+          const ev = normalizeEvents(j);
+          const cr = normalizeCreatives(j);
+          setResults({
+            events: ev.slice(0, 5),
+            creatives: cr.slice(0, 5),
+          });
+        } else {
+          // 2) Fallback: fetch lists and filter client-side
+          const [evR, crR] = await Promise.allSettled([
+            fetch(`/api/events/list/all/`, { cache: "no-store", signal: ctrl.signal }),
+            fetch(`/api/creatives/`, { cache: "no-store", signal: ctrl.signal }),
+          ]);
+
+          const evJ = evR.status === "fulfilled" ? await evR.value.json().catch(() => []) : [];
+          const crJ = crR.status === "fulfilled" ? await crR.value.json().catch(() => []) : [];
+
+          const allEv = normalizeEvents(evJ);
+          const allCr = normalizeCreatives(crJ);
+
+          const nq = q.toLowerCase();
+          const fEv = allEv.filter((e) => (e.title || "").toLowerCase().includes(nq)).slice(0, 5);
+          const fCr = allCr.filter((c) => (c.display_name || "").toLowerCase().includes(nq)).slice(0, 5);
+
+          setResults({ events: fEv, creatives: fCr });
+        }
+      } catch (e: any) {
+        if (ctrl.signal.aborted) return;
+        setSearchErr("Search failed");
+        setResults({ events: [], creatives: [] });
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300); // debounce
+
+    return () => {
+      clearTimeout(id);
+      ctrl.abort();
+    };
+  }, [query]);
+
+  // helpers to normalize potential shapes
+  function normalizeEvents(data: any): SearchEvent[] {
+    const pick = (x: any) => ({
+      slug: String(x?.slug ?? ""),
+      title: String(x?.title ?? x?.name ?? ""),
+    });
+    if (Array.isArray(data)) return data.map(pick).filter((x) => x.slug && x.title);
+    if (Array.isArray(data?.results)) return data.results.map(pick).filter((x: { slug: any; title: any; }) => x.slug && x.title);
+    if (Array.isArray(data?.events)) return data.events.map(pick).filter((x: { slug: any; title: any; }) => x.slug && x.title);
+    if (Array.isArray(data?.data?.events)) return data.data.events.map(pick).filter((x: { slug: any; title: any; }) => x.slug && x.title);
+    return [];
+  }
+  function normalizeCreatives(data: any): SearchCreative[] {
+    const pick = (x: any) => ({
+      slug: String(x?.slug ?? ""),
+      display_name: String(x?.display_name ?? x?.name ?? ""),
+    });
+    if (Array.isArray(data)) return data.map(pick).filter((x) => x.slug && x.display_name);
+    if (Array.isArray(data?.results)) return data.results.map(pick).filter((x: { slug: any; display_name: any; }) => x.slug && x.display_name);
+    if (Array.isArray(data?.creatives)) return data.creatives.map(pick).filter((x: { slug: any; display_name: any; }) => x.slug && x.display_name);
+    if (Array.isArray(data?.data?.creatives)) return data.data.creatives.map(pick).filter((x: { slug: any; display_name: any; }) => x.slug && x.display_name);
+    return [];
+  }
+
+  const totalResults = useMemo(
+    () => results.events.length + results.creatives.length,
+    [results.events.length, results.creatives.length]
+  );
+
+  function handleSearchEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    if (results.events[0]) {
+      router.push(`/events/${encodeURIComponent(results.events[0].slug)}`);
+      setSearchOpen(false);
+    } else if (results.creatives[0]) {
+      router.push(`/creatives/${encodeURIComponent(results.creatives[0].slug)}`);
+      setSearchOpen(false);
+    }
   }
 
   const links = [
@@ -71,16 +236,14 @@ export default function Navbar({ user }: { user: SessionUser }) {
   ];
 
   const activeClass = (href: string) =>
-    pathname === href ? "text-[#d13841]" : "text-white hover:text-[#d13841]";
-
-  const isAuthed = Boolean(user);
+    pathname === href ? "text-white" : "text-white hover:text-[#d13841]";
 
   return (
     <>
       <nav
         className={`fixed inset-x-0 top-0 z-50 transition-transform duration-300 ${
           show ? "translate-y-0" : "-translate-y-full"
-        } bg-royal-purple/60 backdrop-blur-lg shadow`}
+        } bg-gradient-to-r from-royal-purple/90 via-royal-purple/80 to-sanaa-orange/90 backdrop-blur-lg shadow`}
         style={{ height: "var(--nav-height, 64px)" }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -109,19 +272,105 @@ export default function Navbar({ user }: { user: SessionUser }) {
             </div>
 
             {/* Search */}
-            <div className="col-span-3 hidden md:flex items-center justify-center">
-              <div className="w-full max-w-sm">
+            <div className="col-span-3 hidden md:flex items-center justify-center" ref={searchRef}>
+              <div className="w-full max-w-sm relative">
                 <div className="relative">
                   <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search Sanaa Hive"
+                    onFocus={() => {
+                      if (query.trim().length >= minChars) setSearchOpen(true);
+                    }}
+                    onKeyDown={handleSearchEnter}
+                    placeholder="Search creatives or events"
                     className="w-full rounded-full py-2 pl-4 pr-20 shadow-sm focus:outline-none focus:ring-2 focus:ring-royal-purple/60 bg-white/80 border border-black/5"
                   />
-                  <button className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-full bg-sanaa-orange text-white text-sm font-medium hover:opacity-90">
+                  <button
+                    onClick={() => {
+                      if (results.events[0]) {
+                        router.push(`/events/${encodeURIComponent(results.events[0].slug)}`);
+                        setSearchOpen(false);
+                      } else if (results.creatives[0]) {
+                        router.push(`/creatives/${encodeURIComponent(results.creatives[0].slug)}`);
+                        setSearchOpen(false);
+                      }
+                    }}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-full bg-sanaa-orange text-white text-sm font-medium hover:opacity-90"
+                  >
                     Search
                   </button>
                 </div>
+
+                {/* Results panel */}
+                {searchOpen && (
+                  <div className="absolute left-0 right-0 mt-2 bg-white/95 backdrop-blur-sm border border-black/10 rounded-xl shadow-lg overflow-hidden">
+                    <div className="max-h-80 overflow-auto py-2">
+                      {searchLoading && (
+                        <div className="px-3 py-2 text-sm text-gray-600">Searching…</div>
+                      )}
+
+                      {!searchLoading && searchErr && (
+                        <div className="px-3 py-2 text-sm text-rose-700">{searchErr}</div>
+                      )}
+
+                      {!searchLoading && !searchErr && totalResults === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-600">No results</div>
+                      )}
+
+                      {/* Events */}
+                      {!searchLoading && results.events.length > 0 && (
+                        <>
+                          <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">
+                            Events
+                          </div>
+                          <ul className="pb-1">
+                            {results.events.map((e) => (
+                              <li key={`ev-${e.slug}`}>
+                                <Link
+                                  href={`/events/${encodeURIComponent(e.slug)}`}
+                                  className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
+                                  onClick={() => setSearchOpen(false)}
+                                >
+                                  {/* small calendar icon */}
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M7 3v3M17 3v3M3 8h18M5 21h14a2 2 0 0 0 2-2V8H3v11a2 2 0 0 0 2 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                                  </svg>
+                                  <span className="truncate">{e.title}</span>
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+
+                      {/* Creatives */}
+                      {!searchLoading && results.creatives.length > 0 && (
+                        <>
+                          <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">
+                            Creatives
+                          </div>
+                          <ul className="pb-2">
+                            {results.creatives.map((c) => (
+                              <li key={`cr-${c.slug}`}>
+                                <Link
+                                  href={`/creatives/${encodeURIComponent(c.slug)}`}
+                                  className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
+                                  onClick={() => setSearchOpen(false)}
+                                >
+                                  {/* small user icon */}
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm8 9a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                  <span className="truncate">{c.display_name}</span>
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -133,31 +382,36 @@ export default function Navbar({ user }: { user: SessionUser }) {
                   <div className="flex items-center">
                     <Link
                       href="/profile"
-                      className="hidden sm:inline-flex w-10 h-10 bg-white/70 backdrop-blur flex items-center justify-center text-gray-700 hover:bg-white rounded-full border border-black/10"
+                      className="hidden sm:inline-flex h-10 w-10 overflow-hidden rounded-full border border-white/30"
                       aria-label="Profile"
                       title={user?.username || "My Account"}
                     >
-                      <img src="/assets/navbar/user.png" alt="Profile" className="h-6 w-auto" />
+                      <img
+                        src={avatarSrc}
+                        alt="Profile"
+                        className="h-10 w-10 object-cover"
+                        onError={(e) => {
+                          const img = e.currentTarget as HTMLImageElement;
+                          if (img.src.endsWith(DEFAULT_AVATAR)) return;
+                          img.src = DEFAULT_AVATAR;
+                        }}
+                      />
                     </Link>
+
+                    {/* Dropdown toggle: no background circle, white icon */}
                     <button
                       type="button"
                       onClick={() => setMenuOpen((s) => !s)}
                       aria-haspopup="menu"
                       aria-expanded={menuOpen}
-                      className="hidden sm:inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white/70 hover:bg-white text-gray-700"
+                      className="hidden sm:inline-flex p-2 text-white hover:text-white/90"
                       title="Open menu"
                     >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
-                      >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path
                           d="M6 9l6 6 6-6"
                           stroke="currentColor"
-                          strokeWidth="1.5"
+                          strokeWidth="1.8"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
@@ -212,13 +466,13 @@ export default function Navbar({ user }: { user: SessionUser }) {
                 <>
                   <Link
                     href="/signup"
-                    className="hidden md:inline-flex px-3 py-1.5 rounded-full border border-black/10 bg-white hover:bg-gray-50 text-sm font-medium"
+                    className="hidden md:inline-flex px-3 py-1.5 rounded-full bg-royal-purple text-white text-sm font-semibold hover:bg-royal-purple/90"
                   >
                     Sign Up
                   </Link>
                   <Link
                     href="/login"
-                    className="hidden md:inline-flex px-3 py-1.5 rounded-full bg-royal-purple text-white text-sm font-medium hover:bg-royal-purple/90"
+                    className="hidden md:inline-flex px-3 py-1.5 rounded-full bg-royal-purple text-white text-sm font-semibold hover:bg-royal-purple/90"
                   >
                     Log In
                   </Link>
@@ -228,23 +482,23 @@ export default function Navbar({ user }: { user: SessionUser }) {
               {/* Mobile hamburger */}
               <button
                 onClick={() => setIsOpen((s) => !s)}
-                className="md:hidden text-gray-700 focus:outline-none"
+                className="md:hidden text-white focus:outline-none"
                 aria-label="Toggle menu"
                 aria-expanded={isOpen}
               >
                 <div className="relative w-6 h-6">
                   <span
-                    className={`absolute h-0.5 w-6 bg-gray-800 transform transition duration-300 ${
+                    className={`absolute h-0.5 w-6 bg-white transform transition duration-300 ${
                       isOpen ? "rotate-45 top-3" : "top-1"
                     }`}
                   />
                   <span
-                    className={`absolute h-0.5 w-6 bg-gray-800 transition duration-300 ${
+                    className={`absolute h-0.5 w-6 bg-white transition duration-300 ${
                       isOpen ? "opacity-0" : "top-3"
                     }`}
                   />
                   <span
-                    className={`absolute h-0.5 w-6 bg-gray-800 transform transition duration-300 ${
+                    className={`absolute h-0.5 w-6 bg-white transform transition duration-300 ${
                       isOpen ? "-rotate-45 top-3" : "top-5"
                     }`}
                   />
