@@ -4,28 +4,7 @@ import { Calendar, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/router";
 import type { SessionUser } from "@/components/Navbar";
-
-/* ------------------------------------------------------------------ */
-/* Direct-to-Django helpers                                            */
-/* ------------------------------------------------------------------ */
-function getCookie(name: string) {
-  if (typeof document === "undefined") return "";
-  const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]) : "";
-}
-
-const DJ = (process.env.NEXT_PUBLIC_DJANGO_API_BASE || "").replace(/\/+$/, "");
-if (!DJ) {
-  // eslint-disable-next-line no-console
-  console.warn("NEXT_PUBLIC_DJANGO_API_BASE is missing");
-}
-
-async function djFetch(path: string, init?: RequestInit) {
-  return fetch(`${DJ}${path}`, {
-    credentials: "include", // send cookies (JWT/Session)
-    ...init,
-  });
-}
+import { fetchJson } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /* Utility                                                             */
@@ -86,7 +65,7 @@ type EventForm = {
 type ApiEvent = { id: number; slug: string; organizer_slug?: string | null };
 
 /* ------------------------------------------------------------------ */
-/* Summary card extracted so we can reuse it inside the success modal  */
+/* Summary card                                                        */
 /* ------------------------------------------------------------------ */
 function EventSummaryCard({
   form,
@@ -332,9 +311,6 @@ export default function CreateEventPage({ user }: { user: SessionUser }) {
       tags: parseTags(form.tagsInput),
     };
 
-    // CSRF (only if your Django checks CSRF for cookie-auth POST)
-    const csrf = getCookie("csrftoken");
-
     let res: Response;
     if (form.coverFile) {
       const fd = new FormData();
@@ -348,26 +324,19 @@ export default function CreateEventPage({ user }: { user: SessionUser }) {
       fd.append("tags", JSON.stringify(payloadBase.tags));
       fd.append("cover_image", form.coverFile); // field name matches your model
 
-      res = await djFetch(`/api/events/`, {
+      // POST via Next proxy (reads accessToken cookie, forwards Authorization)
+      res = await fetchJson("/api/proxy/events", {
         method: "POST",
-        headers: csrf ? { "X-CSRFToken": csrf } : undefined,
-        body: fd, // don't set Content-Type
+        body: fd, // do NOT set Content-Type
       });
     } else {
-      res = await djFetch(`/api/events/`, {
+      res = await fetchJson("/api/proxy/events", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(csrf ? { "X-CSRFToken": csrf } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payloadBase),
       });
     }
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text || `Request failed with ${res.status}`);
-    }
     return (await res.json()) as ApiEvent;
   }
 
@@ -382,11 +351,15 @@ export default function CreateEventPage({ user }: { user: SessionUser }) {
       const created = await createEvent();
       setCreatedEvent(created); // ← this triggers the success modal
     } catch (err: any) {
+      const msg =
+        err?.res
+          ? await err.res.text().catch(() => "")
+          : (err?.message || "Failed to create event");
       try {
-        const json = JSON.parse(err.message);
-        setSubmitError(typeof json === "object" ? JSON.stringify(json, null, 2) : String(err.message || "Failed to create event"));
+        const json = JSON.parse(msg);
+        setSubmitError(typeof json === "object" ? JSON.stringify(json, null, 2) : String(msg));
       } catch {
-        setSubmitError(String(err.message || "Failed to create event"));
+        setSubmitError(String(msg));
       }
     } finally {
       setSubmitting(false);
@@ -726,13 +699,13 @@ export default function CreateEventPage({ user }: { user: SessionUser }) {
                 </button>
               </div>
 
-              {/* Reuse the same summary card in the modal */}
+              {/* Reuse summary card */}
               <EventSummaryCard
                 form={form}
                 totalTicketsNum={totalTicketsNum}
                 allocationSum={allocationSum}
                 remaining={remaining}
-                errors={{}} // show a clean card in success
+                errors={{}}
               />
             </div>
           </div>
