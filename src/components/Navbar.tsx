@@ -23,7 +23,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false); // mobile menu
   const [show, setShow] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
 
@@ -52,16 +52,18 @@ export default function Navbar({ user }: { user: SessionUser }) {
       const curr = window.scrollY;
       setShow(curr <= lastScrollY);
       setLastScrollY(curr);
+      // close mobile menu on scroll
       if (isOpen) setIsOpen(false);
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [lastScrollY, isOpen]);
 
-  /* ---------------- Close dropdown on route change ---------------- */
+  /* ---------------- Close dropdowns & mobile menu on route change ---------------- */
   useEffect(() => {
     setMenuOpen(false);
     setSearchOpen(false);
+    setIsOpen(false);
   }, [pathname]);
 
   /* ---------------- Close menus on outside click + Esc ---------------- */
@@ -75,6 +77,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
       if (e.key === "Escape") {
         setMenuOpen(false);
         setSearchOpen(false);
+        setIsOpen(false);
       }
     };
     window.addEventListener("mousedown", onClick);
@@ -84,6 +87,17 @@ export default function Navbar({ user }: { user: SessionUser }) {
       window.removeEventListener("keydown", onKey);
     };
   }, [menuOpen, searchOpen]);
+
+  /* ---------------- Prevent body scroll when mobile menu is open ---------------- */
+  useEffect(() => {
+    if (isOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [isOpen]);
 
   /* ---------------- Logout ---------------- */
   async function handleLogout() {
@@ -107,7 +121,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
         const r1 = await fetch("/api/me/creative-profile/", { cache: "no-store" });
         const j1 = await r1.json().catch(() => ({}));
         if (r1.ok && j1?.avatar_url) {
-          a = j1.avatar_url;
+          a = j1.avatar_url; // absolute Cloudinary URL passes through unchanged
         } else {
           const r2 = await fetch("/api/me/profile", { cache: "no-store" });
           const j2 = await r2.json().catch(() => ({}));
@@ -258,7 +272,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
               </Link>
             </div>
 
-            {/* Nav links */}
+            {/* Nav links (desktop) */}
             <div className="col-span-3 hidden md:flex items-center gap-6 mr-6">
               {links.map(({ href, label }) => (
                 <Link
@@ -271,7 +285,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
               ))}
             </div>
 
-            {/* Search */}
+            {/* Search (desktop) */}
             <div className="col-span-3 hidden md:flex items-center justify-center" ref={searchRef}>
               <div className="w-full max-w-sm relative">
                 <div className="relative">
@@ -331,7 +345,6 @@ export default function Navbar({ user }: { user: SessionUser }) {
                                   className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
                                   onClick={() => setSearchOpen(false)}
                                 >
-                                  {/* small calendar icon */}
                                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                     <path d="M7 3v3M17 3v3M3 8h18M5 21h14a2 2 0 0 0 2-2V8H3v11a2 2 0 0 0 2 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                                   </svg>
@@ -357,7 +370,6 @@ export default function Navbar({ user }: { user: SessionUser }) {
                                   className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
                                   onClick={() => setSearchOpen(false)}
                                 >
-                                  {/* small user icon */}
                                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                     <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm8 9a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                                   </svg>
@@ -376,9 +388,9 @@ export default function Navbar({ user }: { user: SessionUser }) {
 
             {/* Right side */}
             <div className="col-span-3 flex items-center justify-end gap-3 md:gap-4">
-              {/* Profile + dropdown */}
+              {/* Profile + dropdown (desktop) */}
               {isAuthed && (
-                <div className="relative" ref={menuRef}>
+                <div className="relative hidden sm:block" ref={menuRef}>
                   <div className="flex items-center">
                     <Link
                       href="/profile"
@@ -398,7 +410,6 @@ export default function Navbar({ user }: { user: SessionUser }) {
                       />
                     </Link>
 
-                    {/* Dropdown toggle: no background circle, white icon */}
                     <button
                       type="button"
                       onClick={() => setMenuOpen((s) => !s)}
@@ -479,7 +490,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
                 </>
               )}
 
-              {/* Mobile hamburger */}
+              {/* Mobile hamburger (always visible) */}
               <button
                 onClick={() => setIsOpen((s) => !s)}
                 className="md:hidden text-white focus:outline-none"
@@ -507,6 +518,92 @@ export default function Navbar({ user }: { user: SessionUser }) {
             </div>
           </div>
         </div>
+
+        {/* ---------- MOBILE MENU PANEL ---------- */}
+        <div
+          className={`md:hidden absolute inset-x-0 top-full origin-top bg-white/95 backdrop-blur-md border-t border-black/10 shadow-lg transition-transform duration-200 ${
+            isOpen ? "scale-y-100" : "scale-y-0"
+          }`}
+          style={{ transformOrigin: "top" }}
+          aria-hidden={!isOpen}
+        >
+          <div className="px-4 py-3 flex flex-col gap-2">
+            {links.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className="block px-3 py-2 rounded-lg text-gray-800 hover:bg-gray-100"
+                onClick={() => setIsOpen(false)}
+              >
+                {label}
+              </Link>
+            ))}
+
+            {/* Divider */}
+            <div className="my-2 h-px bg-black/10" />
+
+            {isAuthed ? (
+              <>
+                <Link
+                  href="/events"
+                  className="block px-3 py-2 rounded-lg text-gray-800 hover:bg-gray-100"
+                  onClick={() => setIsOpen(false)}
+                >
+                  My Events
+                </Link>
+                <Link
+                  href="/profile"
+                  className="block px-3 py-2 rounded-lg text-gray-800 hover:bg-gray-100"
+                  onClick={() => setIsOpen(false)}
+                >
+                  My Profile
+                </Link>
+                <Link
+                  href="/account"
+                  className="block px-3 py-2 rounded-lg text-gray-800 hover:bg-gray-100"
+                  onClick={() => setIsOpen(false)}
+                >
+                  My Account
+                </Link>
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    handleLogout();
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-gray-800 hover:bg-gray-100"
+                >
+                  Log Out
+                </button>
+              </>
+            ) : (
+              <div className="flex gap-2">
+                <Link
+                  href="/signup"
+                  className="flex-1 text-center px-3 py-2 rounded-lg bg-royal-purple text-white font-semibold hover:bg-royal-purple/90"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Sign Up
+                </Link>
+                <Link
+                  href="/login"
+                  className="flex-1 text-center px-3 py-2 rounded-lg bg-royal-purple text-white font-semibold hover:bg-royal-purple/90"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Log In
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile overlay behind the panel */}
+        {isOpen && (
+          <div
+            className="md:hidden fixed inset-0 z-40 bg-black/40"
+            onClick={() => setIsOpen(false)}
+            aria-hidden="true"
+          />
+        )}
       </nav>
     </>
   );
