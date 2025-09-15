@@ -18,27 +18,38 @@ type Creative = {
 
 type EventItem = {
   id: number | string;
-  slug: string;            // ⬅️ added
+  slug: string;
   title: string;
-  start_time?: string;     // ISO
+  start_time?: string;
   venue?: string;
   cover_url?: string;
 };
 
-const images_url = (process.env.NEXT_PUBLIC_MEDIA_BASE || "http://localhost:8000").replace(/\/+$/, "");
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000").replace(/\/+$/, "");
+const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE || API_BASE).replace(/\/+$/, "");
+
+async function fetchJsonSafe(url: string, init?: RequestInit) {
+  const r = await fetch(url, { ...init, headers: { Accept: "application/json", ...(init?.headers || {}) } });
+  const ct = r.headers.get("content-type") || "";
+  // If it's not JSON, try to read text and throw a readable error
+  if (!ct.includes("application/json")) {
+    const text = await r.text().catch(() => "");
+    const msg = text?.slice(0, 200) || `Unexpected response (${r.status})`;
+    throw new Error(msg);
+  }
+  const j = await r.json();
+  if (!r.ok) {
+    throw new Error(typeof j?.detail === "string" ? j.detail : j?.error || `HTTP ${r.status}`);
+  }
+  return j;
+}
 
 // Verified-only badge with icon
 function VerifiedBadge() {
   return (
     <span className="inline-flex items-center gap-0">
-      <img
-        src="/verified-badge.png"
-        alt="Verified"
-        className="h-8 w-8"
-      />
-      <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-royal-purple text-white">
-        Verified
-      </span>
+      <img src="/verified-badge.png" alt="Verified" className="h-8 w-8" />
+      <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-royal-purple text-white">Verified</span>
     </span>
   );
 }
@@ -50,7 +61,6 @@ export default function PublicCreativeProfile() {
   const [err, setErr] = useState<string | null>(null);
   const [creative, setCreative] = useState<Creative | null>(null);
 
-  // events
   const [events, setEvents] = useState<EventItem[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsErr, setEventsErr] = useState<string | null>(null);
@@ -65,12 +75,10 @@ export default function PublicCreativeProfile() {
       try {
         setErr(null);
         setLoading(true);
-        // creative detail
-        const r = await fetch(`/api/creatives/${encodeURIComponent(slug)}`, { cache: "no-store" });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j?.error || "Failed to load creative");
+        // Creative detail (public)
+        const data = await fetchJsonSafe(`${API_BASE}/api/creatives/${encodeURIComponent(slug)}/`);
         if (!mounted) return;
-        setCreative(j);
+        setCreative(data);
       } catch (e: any) {
         if (!mounted) return;
         setErr(e?.message || "Failed to load creative");
@@ -79,19 +87,13 @@ export default function PublicCreativeProfile() {
       }
     })();
 
-    // load events in parallel
     (async () => {
       try {
         setEventsErr(null);
         setEventsLoading(true);
-        const er = await fetch(`/api/creatives/${encodeURIComponent(slug)}/events`, { cache: "no-store" });
-        const ej = await er.json().catch(() => ({}));
-        if (!er.ok) {
-          setEventsErr(ej?.error || "Failed to load events");
-          setEvents([]);
-        } else {
-          setEvents(Array.isArray(ej) ? ej : Array.isArray(ej?.results) ? ej.results : []);
-        }
+        const list = await fetchJsonSafe(`${API_BASE}/api/creatives/${encodeURIComponent(slug)}/events/`);
+        const arr = Array.isArray(list) ? list : Array.isArray(list?.results) ? list.results : [];
+        setEvents(arr);
       } catch (e: any) {
         setEventsErr(e?.message || "Failed to load events");
         setEvents([]);
@@ -100,7 +102,9 @@ export default function PublicCreativeProfile() {
       }
     })();
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [isReady, slug]);
 
   const stageName = (creative?.display_name || slug || "Profile").trim();
@@ -113,8 +117,8 @@ export default function PublicCreativeProfile() {
   const avatarSrc = (() => {
     const v = (creative?.avatar_url || "").trim();
     if (!v) return "/user.png";
-    if (/^(https?:)?\/\//i.test(v) || /^data:/i.test(v)) return v;
-    return `${images_url}/${v.replace(/^\/+/, "")}`;
+    if (/^(https?:)?\/\//i.test(v) || /^data:/i.test(v)) return v; // Cloudinary absolute URL or data URL
+    return `${MEDIA_BASE}/${v.replace(/^\/+/, "")}`;
   })();
 
   const fmtDate = (iso?: string) => {
@@ -157,7 +161,6 @@ export default function PublicCreativeProfile() {
               <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">
                 {loading ? "Loading…" : stageName}
               </h1>
-              {/* Show verified badge ONLY when verified */}
               {!loading && isVerified && <VerifiedBadge />}
             </div>
 
@@ -213,10 +216,7 @@ export default function PublicCreativeProfile() {
                     <span className="text-xs text-gray-500">Loading…</span>
                   ) : creative?.tags?.length ? (
                     creative.tags.map((t) => (
-                      <span
-                        key={t}
-                        className="px-2.5 py-1 rounded-full bg-sanaa-orange/70 text-white text-xs"
-                      >
+                      <span key={t} className="px-2.5 py-1 rounded-full bg-sanaa-orange/70 text-white text-xs">
                         {t}
                       </span>
                     ))
@@ -261,7 +261,7 @@ export default function PublicCreativeProfile() {
                     const img = ev.cover_url
                       ? (/^(https?:)?\/\//i.test(ev.cover_url)
                           ? ev.cover_url
-                          : `${images_url}/${ev.cover_url.replace(/^\/+/, "")}`)
+                          : `${MEDIA_BASE}/${ev.cover_url.replace(/^\/+/, "")}`)
                       : "/event-placeholder.jpg";
                     return (
                       <div key={String(ev.id)} className="bg-white rounded-lg shadow overflow-hidden flex flex-col">
@@ -269,9 +269,7 @@ export default function PublicCreativeProfile() {
                           <img src={img} alt="" className="w-full h-full object-cover" />
                         </div>
                         <div className="p-4 flex-1">
-                          <div className="text-sm font-semibold text-sanaa-orange">
-                            {ev.title || "Untitled event"}
-                          </div>
+                          <div className="text-sm font-semibold text-sanaa-orange">{ev.title || "Untitled event"}</div>
                           <div className="text-xs text-gray-600 mt-1">{fmtDate(ev.start_time)}</div>
                           {ev.venue && <div className="text-xs text-gray-500">{ev.venue}</div>}
                         </div>
