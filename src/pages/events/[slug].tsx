@@ -16,78 +16,172 @@ function formatDate(d?: string | Date | null) {
   }).format(date);
 }
 
-type Ticket = { id: string; label: string; price: number; available: number };
+type TierKey = "regular" | "vip" | "vvip";
+type Ticket = { id: TierKey; label: string; price: number; available: number };
 type EventItem = {
   slug: string;
   title: string;
   description?: string;
   venue?: string;
-  image: string;        // resolved absolute/relative image URL to show
+  image: string;
   badge?: string;
-  date?: string | null; // ISO
-  tickets?: Ticket[];   // keep mock for now
+  date?: string | null;
 };
 
 type Props = { event: EventItem };
 
+type PricingRow = {
+  regular_price: string; regular_allocation: number;
+  vip_price: string;     vip_allocation: number;
+  vvip_price: string;    vvip_allocation: number;
+};
+
 type Tab = "tickets" | "photos" | "updates";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE || API_BASE).replace(/\/+$/, "");
+
 export default function EventProfile({ event }: Props) {
-  // ---- Tabs ----
   const [tab, setTab] = useState<Tab>("tickets");
 
-  // ---- Tickets state (mock for now) ----
-  const tickets = event.tickets || [];
-  const [selected, setSelected] = useState<string | null>(tickets[0]?.id ?? null);
-  const [qty, setQty] = useState(1);
+  // fetched ticket data
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(true);
+  const [mintedExists, setMintedExists] = useState<boolean>(false);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  const selectedTicket = useMemo(
-    () => tickets.find((t) => t.id === selected) || null,
-    [tickets, selected]
-  );
-  const total = selectedTicket ? selectedTicket.price * qty : 0;
+  // quantity per tier
+  const [qtyByTier, setQtyByTier] = useState<Record<TierKey, number>>({
+    regular: 1, vip: 1, vvip: 1,
+  });
 
-  // ---- Payment modal state ----
+  // selection for modal
+  const [selected, setSelected] = useState<Ticket | null>(null);
   const [showPayModal, setShowPayModal] = useState(false);
 
-  // Buyer form
+  // buyer form
   const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName]   = useState("");
-  const [email, setEmail]         = useState("");
-  const [phone9, setPhone9]       = useState(""); // 9 digits after +254
+  const [lastName,  setLastName]  = useState("");
+  const [email,     setEmail]     = useState("");
+  const [phone9,    setPhone9]    = useState(""); // 9 digits after +254
   const fullPhone = `+254${phone9}`;
+  
 
-  // basic validations
   const emailValid = !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const phoneValid = /^\d{9}$/.test(phone9); // exactly 9 digits
-  const canSubmit  = Boolean(selectedTicket) && phoneValid && emailValid;
+  const phoneValid = /^\d{9}$/.test(phone9);
+  const canSubmit  = Boolean(selected) && phoneValid && emailValid;
 
-  // prevent body scroll when modal open
+  const total = useMemo(() => {
+    if (!selected) return 0;
+    const q = qtyByTier[selected.id] || 1;
+    return selected.price * q;
+  }, [selected, qtyByTier]);
+
   useEffect(() => {
-    if (showPayModal) {
-      document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = ""; };
+    let alive = true;
+
+    async function getCount(url: string): Promise<number> {
+      const r = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!r.ok) return 0;
+      const j = await r.json().catch(() => ({} as any));
+      if (typeof j?.count === "number") return j.count;
+      if (Array.isArray(j)) return j.length;
+      if (Array.isArray(j?.results)) return j.results.length;
+      return 0;
     }
+
+    (async () => {
+      try {
+        setLoadingTickets(true);
+        setLoadErr(null);
+
+        // 1) check if ANY tickets are minted for this event
+        const mintedTotal = await getCount(`${API_BASE}/api/tickets/?event=${encodeURIComponent(event.slug)}&page_size=1`);
+        if (!alive) return;
+        setMintedExists(mintedTotal > 0);
+
+        if (mintedTotal <= 0) {
+          setTickets([]);
+          return;
+        }
+
+        // 2) fetch pricing row for prices/allocations
+        let pricing: PricingRow | null = null;
+        try {
+          const pr = await fetch(`${API_BASE}/api/ticket-pricing/?event=${encodeURIComponent(event.slug)}`, {
+            headers: { Accept: "application/json" },
+          });
+          if (pr.ok) {
+            const j = await pr.json();
+            const row: PricingRow | null =
+              Array.isArray(j) ? (j[0] || null) : Array.isArray(j?.results) ? (j.results[0] || null) : j || null;
+            pricing = row;
+          }
+        } catch { /* noop */ }
+
+        // 3) available counts per tier (available=true)
+        const [availR, availV, availVV] = await Promise.all([
+          getCount(`${API_BASE}/api/tickets/?event=${encodeURIComponent(event.slug)}&tier=regular&available=true&page_size=1`),
+          getCount(`${API_BASE}/api/tickets/?event=${encodeURIComponent(event.slug)}&tier=vip&available=true&page_size=1`),
+          getCount(`${API_BASE}/api/tickets/?event=${encodeURIComponent(event.slug)}&tier=vvip&available=true&page_size=1`),
+        ]);
+        if (!alive) return;
+        const baseCards = [
+          { id: "regular" as const, label: "Regular", price: Number(pricing?.regular_price ?? 0), available: availR },
+          { id: "vip"     as const, label: "VIP",     price: Number(pricing?.vip_price     ?? 0), available: availV },
+          { id: "vvip"    as const, label: "VVIP",    price: Number(pricing?.vvip_price    ?? 0), available: availVV },
+        ];
+        const cards: Ticket[] = baseCards.filter(t =>
+          (t.price > 0) || t.available > 0 || (
+            pricing ? (
+              (t.id === "regular" && (pricing.regular_allocation || 0) > 0) ||
+              (t.id === "vip"     && (pricing.vip_allocation     || 0) > 0) ||
+              (t.id === "vvip"    && (pricing.vvip_allocation    || 0) > 0)
+            ) : true
+          )
+        );
+
+        setTickets(cards);
+      } catch (e: any) {
+        if (!alive) return;
+        setTickets([]);
+        setLoadErr(e?.message || "Failed to load tickets.");
+      } finally {
+        if (alive) setLoadingTickets(false);
+      }
+    })();
+
+    return () => { alive = false; };
+  }, [event.slug]);
+
+  // prevent scroll when modal open
+  useEffect(() => {
+    if (!showPayModal) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
   }, [showPayModal]);
 
-  function openPayModal() {
-    if (!selectedTicket || selectedTicket.available <= 0) return;
+  function handlePhoneChange(v: string) {
+    const onlyDigits = v.replace(/\D/g, "").slice(0, 9);
+    setPhone9(onlyDigits);
+  }
+
+  function openBuyFor(t: Ticket) {
+    if (t.available <= 0) return;
+    setSelected(t);
     setShowPayModal(true);
   }
   function closePayModal() {
     setShowPayModal(false);
   }
-  function handlePhoneChange(v: string) {
-    const onlyDigits = v.replace(/\D/g, "").slice(0, 9);
-    setPhone9(onlyDigits);
-  }
   function handleConfirmPay(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || !selected) return;
     const payload = {
       event: event.title,
-      ticket: selectedTicket?.label,
-      qty,
+      ticket: selected.label,
+      qty: qtyByTier[selected.id] || 1,
       total,
       buyer: {
         firstName: firstName || undefined,
@@ -143,7 +237,7 @@ export default function EventProfile({ event }: Props) {
           </div>
         </div>
 
-        {/* Tabs (Tickets + Photos + Updates) */}
+        {/* Tabs */}
         <div className="mt-6">
           <div className="flex items-center gap-3 border-b border-black/10">
             {[
@@ -165,103 +259,72 @@ export default function EventProfile({ event }: Props) {
             ))}
           </div>
 
-          {/* Tab panels */}
+          {/* Tickets tab */}
           {tab === "tickets" && (
-            <div className="mt-6 grid md:grid-cols-3 gap-6">
-              {/* Left: selector */}
-              <div className="md:col-span-2 bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold text-gray-900">Choose your tickets</h3>
-
-                {tickets.length ? (
-                  <>
-                    <div className="mt-4 grid sm:grid-cols-2 gap-3">
-                      {tickets.map((t) => {
-                        const soldOut = t.available <= 0;
-                        const active = selected === t.id;
-                        return (
-                          <button
-                            key={t.id}
-                            onClick={() => !soldOut && setSelected(t.id)}
-                            className={`w-full text-left px-4 py-3 rounded-md border transition ${
-                              soldOut
-                                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                                : active
-                                  ? "bg-royal-purple text-white border-royal-purple"
-                                  : "bg-white text-gray-800 border-black/10 hover:bg-gray-50"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">{t.label}</span>
-                              <span className="text-sm">
-                                {t.price === 0 ? "Free" : `Ksh. ${t.price.toLocaleString()}`}
-                              </span>
-                            </div>
-                            <div className="text-xs mt-1">
-                              {t.available > 0 ? `${t.available} left` : "Sold out"}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-3">
-                      <label className="text-sm text-gray-700">Quantity</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={qty}
-                        onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-                        className="w-20 rounded-md border border-black/10 px-3 py-2"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-gray-600 mt-2">Tickets info coming soon.</p>
-                )}
-              </div>
-
-              {/* Right: summary */}
-              <aside className="bg-white rounded-lg shadow p-6 h-fit">
-                <h4 className="text-sm font-semibold text-gray-900">Order Summary</h4>
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Event</span>
-                    <span className="font-medium text-gray-900">{event.title}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Ticket</span>
-                    <span className="font-medium text-gray-900">{selectedTicket ? selectedTicket.label : "--"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Qty</span>
-                    <span className="font-medium text-gray-900">{qty}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t">
-                    <span>Total</span>
-                    <span className="font-bold text-gray-900">
-                      {selectedTicket ? (total === 0 ? "Free" : `Ksh. ${total.toLocaleString()}`) : "--"}
-                    </span>
-                  </div>
+            <div className="mt-6">
+              {loadingTickets ? (
+                <div className="text-sm text-gray-600">Loading tickets…</div>
+              ) : loadErr ? (
+                <div className="rounded-md border border-rose-200 bg-rose-50 text-rose-700 p-3 text-sm">
+                  {loadErr}
                 </div>
+              ) : !mintedExists ? (
+                <div className="rounded-lg border p-6 text-center text-gray-700">
+                  Sorry, tickets not out yet.
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {tickets.map((t) => {
+                    const qty = qtyByTier[t.id] || 1;
+                    const soldOut = t.available <= 0;
+                    return (
+                      <div key={t.id} className="rounded-xl border bg-white p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="text-base font-semibold">{t.label}</div>
+                          <div className="text-sm">
+                            {t.price === 0 ? "Free" : `KES ${t.price.toLocaleString()}`}
+                          </div>
+                        </div>
 
-                <button
-                  disabled={!selectedTicket || (selectedTicket && selectedTicket.available <= 0)}
-                  className={`mt-4 w-full px-4 py-2 rounded-md font-medium transition ${
-                    !selectedTicket || selectedTicket.available <= 0
-                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                      : "bg-sanaa-orange text-white hover:opacity-90"
-                  }`}
-                  onClick={openPayModal}
-                >
-                  {selectedTicket && selectedTicket.available <= 0 ? "Sold Out" : "Proceed to Pay"}
-                </button>
-              </aside>
+                        <div className="mt-2 text-xs text-gray-600">
+                          {soldOut ? "Sold out" : `${t.available} left`}
+                        </div>
+
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={qty}
+                            onChange={(e) => {
+                              const v = Math.max(1, Number(e.target.value) || 1);
+                              setQtyByTier((p) => ({ ...p, [t.id]: v }));
+                            }}
+                            className="w-24 rounded-md border border-black/10 px-3 py-2"
+                          />
+                        </div>
+
+                        <button
+                          disabled={soldOut}
+                          onClick={() => openBuyFor(t)}
+                          className={`mt-4 w-full rounded-md px-4 py-2 font-medium transition ${
+                            soldOut
+                              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                              : "bg-sanaa-orange text-white hover:opacity-90"
+                          }`}
+                        >
+                          {soldOut ? "Sold Out" : "Buy"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
           {tab === "photos" && (
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {/* Placeholder photos */}
               {[1, 2, 3].map((x) => (
                 <div key={x} className="bg-white rounded-lg shadow-md overflow-hidden">
                   <img src={event.image} alt={event.title} className="w-full h-56 object-cover" />
@@ -279,27 +342,13 @@ export default function EventProfile({ event }: Props) {
       </section>
 
       {/* Payment Modal */}
-      {showPayModal && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          {/* overlay */}
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={closePayModal}
-            aria-hidden="true"
-          />
-          {/* modal */}
+      {showPayModal && selected && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50" onClick={closePayModal} aria-hidden="true" />
           <div className="relative z-10 w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b">
               <h3 className="text-lg font-semibold text-gray-900">Confirm Payment</h3>
-              <button
-                onClick={closePayModal}
-                aria-label="Close"
-                className="rounded-full p-2 hover:bg-gray-100"
-              >
+              <button onClick={closePayModal} aria-label="Close" className="rounded-full p-2 hover:bg-gray-100">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
@@ -307,7 +356,6 @@ export default function EventProfile({ event }: Props) {
             </div>
 
             <form onSubmit={handleConfirmPay} className="px-5 py-4">
-              {/* Summary */}
               <div className="rounded-md bg-sanaa-orange border border-black/10 p-4 text-sm">
                 <div className="flex justify-between">
                   <span className="text-white font-semibold">Event</span>
@@ -315,21 +363,20 @@ export default function EventProfile({ event }: Props) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-white font-semibold">Ticket</span>
-                  <span className="font-medium text-white">{selectedTicket?.label ?? "--"}</span>
+                  <span className="font-medium text-white">{selected.label}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-white font-semibold">Quantity</span>
-                  <span className="font-medium text-white">{qty}</span>
+                  <span className="font-medium text-white">{qtyByTier[selected.id] || 1}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t">
                   <span className="text-white font-semibold">Total</span>
                   <span className="font-bold text-white">
-                    {selectedTicket ? (total === 0 ? "Free" : `KES ${total.toLocaleString()}`) : "--"}
+                    {total === 0 ? "Free" : `KES ${total.toLocaleString()}`}
                   </span>
                 </div>
               </div>
 
-              {/* Buyer Info */}
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">First Name (optional)</label>
@@ -361,11 +408,8 @@ export default function EventProfile({ event }: Props) {
                     emailValid ? "border-black/10 focus:ring-royal-purple/60" : "border-rose-400 focus:ring-rose-300"
                   }`}
                   placeholder="asha@example.com"
-                  required={false}
                 />
-                {!emailValid && (
-                  <p className="mt-1 text-xs text-rose-600">Please enter a valid email address.</p>
-                )}
+                {!emailValid && <p className="mt-1 text-xs text-rose-600">Please enter a valid email address.</p>}
               </div>
 
               <div className="mt-3">
@@ -421,7 +465,7 @@ export default function EventProfile({ event }: Props) {
   );
 }
 
-// ---- SSR: fetch event by slug from Django (or your proxy) ----
+// ---- SSR: fetch event by slug from Django ----
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const slug = params?.slug as string;
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
@@ -450,8 +494,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
           image,
           badge: data.status,
           date: data.start_time || data.start_at || null,
-          tickets: [], // keep mocked for now
-        },
+        } as EventItem,
       },
     };
   } catch {
