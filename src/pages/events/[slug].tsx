@@ -2,6 +2,7 @@
 import type { GetServerSideProps } from "next";
 import Page from "@/components/Page";
 import { useEffect, useMemo, useState } from "react";
+import QtyStepper from "@/components/QtyStepper"; // ← adjust path if needed
 
 function formatDate(d?: string | Date | null) {
   if (!d) return "";
@@ -65,7 +66,6 @@ export default function EventProfile({ event }: Props) {
   const [email,     setEmail]     = useState("");
   const [phone9,    setPhone9]    = useState(""); // 9 digits after +254
   const fullPhone = `+254${phone9}`;
-  
 
   const emailValid = !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const phoneValid = /^\d{9}$/.test(phone9);
@@ -95,7 +95,7 @@ export default function EventProfile({ event }: Props) {
         setLoadingTickets(true);
         setLoadErr(null);
 
-        // 1) check if ANY tickets are minted for this event
+        // 1) any minted tickets?
         const mintedTotal = await getCount(`${API_BASE}/api/tickets/?event=${encodeURIComponent(event.slug)}&page_size=1`);
         if (!alive) return;
         setMintedExists(mintedTotal > 0);
@@ -105,7 +105,7 @@ export default function EventProfile({ event }: Props) {
           return;
         }
 
-        // 2) fetch pricing row for prices/allocations
+        // 2) pricing
         let pricing: PricingRow | null = null;
         try {
           const pr = await fetch(`${API_BASE}/api/ticket-pricing/?event=${encodeURIComponent(event.slug)}`, {
@@ -113,9 +113,9 @@ export default function EventProfile({ event }: Props) {
           });
           if (pr.ok) {
             const j = await pr.json();
-            const row: PricingRow | null =
-              Array.isArray(j) ? (j[0] || null) : Array.isArray(j?.results) ? (j.results[0] || null) : j || null;
-            pricing = row;
+            pricing = Array.isArray(j) ? (j[0] || null)
+                    : Array.isArray(j?.results) ? (j.results[0] || null)
+                    : j || null;
           }
         } catch { /* noop */ }
 
@@ -126,11 +126,13 @@ export default function EventProfile({ event }: Props) {
           getCount(`${API_BASE}/api/tickets/?event=${encodeURIComponent(event.slug)}&tier=vvip&available=true&page_size=1`),
         ]);
         if (!alive) return;
+
         const baseCards = [
           { id: "regular" as const, label: "Regular", price: Number(pricing?.regular_price ?? 0), available: availR },
           { id: "vip"     as const, label: "VIP",     price: Number(pricing?.vip_price     ?? 0), available: availV },
           { id: "vvip"    as const, label: "VVIP",    price: Number(pricing?.vvip_price    ?? 0), available: availVV },
         ];
+
         const cards: Ticket[] = baseCards.filter(t =>
           (t.price > 0) || t.available > 0 || (
             pricing ? (
@@ -292,15 +294,13 @@ export default function EventProfile({ event }: Props) {
 
                         <div className="mt-3">
                           <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
-                          <input
-                            type="number"
-                            min={1}
+                          <QtyStepper
                             value={qty}
-                            onChange={(e) => {
-                              const v = Math.max(1, Number(e.target.value) || 1);
-                              setQtyByTier((p) => ({ ...p, [t.id]: v }));
-                            }}
-                            className="w-24 rounded-md border border-black/10 px-3 py-2"
+                            min={1}
+                            max={Math.max(1, t.available)} // prevent exceeding availability
+                            onChange={(n) =>
+                              setQtyByTier((prev) => ({ ...prev, [t.id]: n }))
+                            }
                           />
                         </div>
 
@@ -377,6 +377,7 @@ export default function EventProfile({ event }: Props) {
                 </div>
               </div>
 
+              {/* Buyer Info */}
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">First Name (optional)</label>
