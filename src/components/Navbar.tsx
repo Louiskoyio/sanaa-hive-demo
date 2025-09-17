@@ -27,6 +27,10 @@ export default function Navbar({ user }: { user: SessionUser }) {
   const [show, setShow] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
 
+  // Auth state (derived from API, not only the prop)
+  const [authed, setAuthed] = useState<boolean>(Boolean(user));
+  const [sessionUser, setSessionUser] = useState<SessionUser>(user);
+
   // Search state
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -43,8 +47,54 @@ export default function Navbar({ user }: { user: SessionUser }) {
   const searchRef = useRef<HTMLDivElement | null>(null);
 
   // Avatar state
-  const isAuthed = Boolean(user);
   const [avatarSrc, setAvatarSrc] = useState<string>(DEFAULT_AVATAR);
+
+  /* ---------------- Sync auth with server on mount & route changes ---------------- */
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/me", { cache: "no-store" });
+        if (!mounted) return;
+        if (r.ok) {
+          const j = await r.json().catch(() => ({}));
+          const isAuthenticated = Boolean(j?.authenticated);
+          setAuthed(isAuthenticated);
+          setSessionUser(isAuthenticated ? j?.user ?? null : null);
+        } else {
+          setAuthed(false);
+          setSessionUser(null);
+        }
+      } catch {
+        if (!mounted) return;
+        setAuthed(false);
+        setSessionUser(null);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [pathname]); // re-check when navigating (e.g., after login redirect)
+
+  /* ---------------- Load avatar when authed ---------------- */
+  useEffect(() => {
+    let mounted = true;
+    if (!authed) {
+      setAvatarSrc(DEFAULT_AVATAR);
+      return;
+    }
+    (async () => {
+      try {
+        // Single, stable endpoint for your profile
+        const r = await fetch("/api/me/profile", { cache: "no-store" });
+        const j = await r.json().catch(() => ({}));
+        if (!mounted) return;
+        setAvatarSrc(toImageSrc(j?.avatar_url));
+      } catch {
+        if (!mounted) return;
+        setAvatarSrc(DEFAULT_AVATAR);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [authed]);
 
   /* ---------------- Hide/show on scroll ---------------- */
   useEffect(() => {
@@ -52,7 +102,6 @@ export default function Navbar({ user }: { user: SessionUser }) {
       const curr = window.scrollY;
       setShow(curr <= lastScrollY);
       setLastScrollY(curr);
-      // close mobile menu on scroll
       if (isOpen) setIsOpen(false);
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -93,9 +142,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
     if (isOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = prev;
-      };
+      return () => { document.body.style.overflow = prev; };
     }
   }, [isOpen]);
 
@@ -104,40 +151,12 @@ export default function Navbar({ user }: { user: SessionUser }) {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {}
+    setAuthed(false);
+    setSessionUser(null);
+    setAvatarSrc(DEFAULT_AVATAR);
     router.replace("/");
     setMenuOpen(false);
   }
-
-  /* ---------------- Load avatar for authed user ---------------- */
-  useEffect(() => {
-    let mounted = true;
-    if (!isAuthed) {
-      setAvatarSrc(DEFAULT_AVATAR);
-      return;
-    }
-    (async () => {
-      try {
-        let a: string | undefined;
-        const r1 = await fetch("/api/me/creative-profile/", { cache: "no-store" });
-        const j1 = await r1.json().catch(() => ({}));
-        if (r1.ok && j1?.avatar_url) {
-          a = j1.avatar_url; // absolute Cloudinary URL passes through unchanged
-        } else {
-          const r2 = await fetch("/api/me/profile", { cache: "no-store" });
-          const j2 = await r2.json().catch(() => ({}));
-          if (r2.ok && j2?.avatar_url) a = j2.avatar_url;
-        }
-        if (!mounted) return;
-        setAvatarSrc(toImageSrc(a));
-      } catch {
-        if (!mounted) return;
-        setAvatarSrc(DEFAULT_AVATAR);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [isAuthed]);
 
   /* ---------------- Debounced search ---------------- */
   const minChars = 2;
@@ -165,15 +184,13 @@ export default function Navbar({ user }: { user: SessionUser }) {
           const j = await r.json();
           const ev = normalizeEvents(j);
           const cr = normalizeCreatives(j);
-          setResults({
-            events: ev.slice(0, 5),
-            creatives: cr.slice(0, 5),
-          });
+          setResults({ events: ev.slice(0, 5), creatives: cr.slice(0, 5) });
         } else {
           // 2) Fallback: fetch lists and filter client-side
           const [evR, crR] = await Promise.allSettled([
             fetch(`/api/events/list/all/`, { cache: "no-store", signal: ctrl.signal }),
-            fetch(`/api/creatives/`, { cache: "no-store", signal: ctrl.signal }),
+            // Exclude suspended creatives in fallback too:
+            fetch(`/api/creatives/?suspended=false`, { cache: "no-store", signal: ctrl.signal }),
           ]);
 
           const evJ = evR.status === "fulfilled" ? await evR.value.json().catch(() => []) : [];
@@ -205,25 +222,19 @@ export default function Navbar({ user }: { user: SessionUser }) {
 
   // helpers to normalize potential shapes
   function normalizeEvents(data: any): SearchEvent[] {
-    const pick = (x: any) => ({
-      slug: String(x?.slug ?? ""),
-      title: String(x?.title ?? x?.name ?? ""),
-    });
+    const pick = (x: any) => ({ slug: String(x?.slug ?? ""), title: String(x?.title ?? x?.name ?? "") });
     if (Array.isArray(data)) return data.map(pick).filter((x) => x.slug && x.title);
-    if (Array.isArray(data?.results)) return data.results.map(pick).filter((x: { slug: any; title: any; }) => x.slug && x.title);
-    if (Array.isArray(data?.events)) return data.events.map(pick).filter((x: { slug: any; title: any; }) => x.slug && x.title);
-    if (Array.isArray(data?.data?.events)) return data.data.events.map(pick).filter((x: { slug: any; title: any; }) => x.slug && x.title);
+    if (Array.isArray(data?.results)) return data.results.map(pick).filter((x: any) => x.slug && x.title);
+    if (Array.isArray(data?.events)) return data.events.map(pick).filter((x: any) => x.slug && x.title);
+    if (Array.isArray(data?.data?.events)) return data.data.events.map(pick).filter((x: any) => x.slug && x.title);
     return [];
   }
   function normalizeCreatives(data: any): SearchCreative[] {
-    const pick = (x: any) => ({
-      slug: String(x?.slug ?? ""),
-      display_name: String(x?.display_name ?? x?.name ?? ""),
-    });
+    const pick = (x: any) => ({ slug: String(x?.slug ?? ""), display_name: String(x?.display_name ?? x?.name ?? "") });
     if (Array.isArray(data)) return data.map(pick).filter((x) => x.slug && x.display_name);
-    if (Array.isArray(data?.results)) return data.results.map(pick).filter((x: { slug: any; display_name: any; }) => x.slug && x.display_name);
-    if (Array.isArray(data?.creatives)) return data.creatives.map(pick).filter((x: { slug: any; display_name: any; }) => x.slug && x.display_name);
-    if (Array.isArray(data?.data?.creatives)) return data.data.creatives.map(pick).filter((x: { slug: any; display_name: any; }) => x.slug && x.display_name);
+    if (Array.isArray(data?.results)) return data.results.map(pick).filter((x: any) => x.slug && x.display_name);
+    if (Array.isArray(data?.creatives)) return data.creatives.map(pick).filter((x: any) => x.slug && x.display_name);
+    if (Array.isArray(data?.data?.creatives)) return data.data.creatives.map(pick).filter((x: any) => x.slug && x.display_name);
     return [];
   }
 
@@ -261,25 +272,16 @@ export default function Navbar({ user }: { user: SessionUser }) {
         style={{ height: "var(--nav-height, 64px)" }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div
-            className="grid grid-cols-12 items-center"
-            style={{ height: "var(--nav-height, 64px)" }}
-          >
+          <div className="grid grid-cols-12 items-center" style={{ height: "var(--nav-height, 64px)" }}>
             {/* Logo */}
             <div className="col-span-3 flex items-center">
-              <Link href="/">
-                <img src="/logo-w.png" alt="Sanaa Hive Logo" className="h-10 w-auto" />
-              </Link>
+              <Link href="/"><img src="/logo-w.png" alt="Sanaa Hive Logo" className="h-10 w-auto" /></Link>
             </div>
 
             {/* Nav links (desktop) */}
             <div className="col-span-3 hidden md:flex items-center gap-6 mr-6">
               {links.map(({ href, label }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`font-semibold transition-colors ${activeClass(href)}`}
-                >
+                <Link key={href} href={href} className={`font-semibold transition-colors ${activeClass(href)}`}>
                   {label}
                 </Link>
               ))}
@@ -292,9 +294,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
                   <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    onFocus={() => {
-                      if (query.trim().length >= minChars) setSearchOpen(true);
-                    }}
+                    onFocus={() => { if (query.trim().length >= minChars) setSearchOpen(true); }}
                     onKeyDown={handleSearchEnter}
                     placeholder="Search creatives or events"
                     className="w-full rounded-full py-2 pl-4 pr-20 shadow-sm focus:outline-none focus:ring-2 focus:ring-royal-purple/60 bg-white/80 border border-black/5"
@@ -315,18 +315,11 @@ export default function Navbar({ user }: { user: SessionUser }) {
                   </button>
                 </div>
 
-                {/* Results panel */}
                 {searchOpen && (
                   <div className="absolute left-0 right-0 mt-2 bg-white/95 backdrop-blur-sm border border-black/10 rounded-xl shadow-lg overflow-hidden">
                     <div className="max-h-80 overflow-auto py-2">
-                      {searchLoading && (
-                        <div className="px-3 py-2 text-sm text-gray-600">Searching…</div>
-                      )}
-
-                      {!searchLoading && searchErr && (
-                        <div className="px-3 py-2 text-sm text-rose-700">{searchErr}</div>
-                      )}
-
+                      {searchLoading && <div className="px-3 py-2 text-sm text-gray-600">Searching…</div>}
+                      {!searchLoading && searchErr && <div className="px-3 py-2 text-sm text-rose-700">{searchErr}</div>}
                       {!searchLoading && !searchErr && totalResults === 0 && (
                         <div className="px-3 py-2 text-sm text-gray-600">No results</div>
                       )}
@@ -334,9 +327,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
                       {/* Events */}
                       {!searchLoading && results.events.length > 0 && (
                         <>
-                          <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">
-                            Events
-                          </div>
+                          <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Events</div>
                           <ul className="pb-1">
                             {results.events.map((e) => (
                               <li key={`ev-${e.slug}`}>
@@ -359,9 +350,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
                       {/* Creatives */}
                       {!searchLoading && results.creatives.length > 0 && (
                         <>
-                          <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">
-                            Creatives
-                          </div>
+                          <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Creatives</div>
                           <ul className="pb-2">
                             {results.creatives.map((c) => (
                               <li key={`cr-${c.slug}`}>
@@ -389,14 +378,14 @@ export default function Navbar({ user }: { user: SessionUser }) {
             {/* Right side */}
             <div className="col-span-3 flex items-center justify-end gap-3 md:gap-4">
               {/* Profile + dropdown (desktop) */}
-              {isAuthed && (
+              {authed && (
                 <div className="relative hidden sm:block" ref={menuRef}>
                   <div className="flex items-center">
                     <Link
                       href="/profile"
                       className="hidden sm:inline-flex h-10 w-10 overflow-hidden rounded-full border border-white/30"
                       aria-label="Profile"
-                      title={user?.username || "My Account"}
+                      title={sessionUser?.username || "My Account"}
                     >
                       <img
                         src={avatarSrc}
@@ -419,13 +408,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
                       title="Open menu"
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path
-                          d="M6 9l6 6 6-6"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
+                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </button>
                   </div>
@@ -473,7 +456,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
               )}
 
               {/* Auth actions (desktop) */}
-              {!isAuthed && (
+              {!authed && (
                 <>
                   <Link
                     href="/signup"
@@ -498,21 +481,9 @@ export default function Navbar({ user }: { user: SessionUser }) {
                 aria-expanded={isOpen}
               >
                 <div className="relative w-6 h-6">
-                  <span
-                    className={`absolute h-0.5 w-6 bg-white transform transition duration-300 ${
-                      isOpen ? "rotate-45 top-3" : "top-1"
-                    }`}
-                  />
-                  <span
-                    className={`absolute h-0.5 w-6 bg-white transition duration-300 ${
-                      isOpen ? "opacity-0" : "top-3"
-                    }`}
-                  />
-                  <span
-                    className={`absolute h-0.5 w-6 bg-white transform transition duration-300 ${
-                      isOpen ? "-rotate-45 top-3" : "top-5"
-                    }`}
-                  />
+                  <span className={`absolute h-0.5 w-6 bg-white transform transition duration-300 ${isOpen ? "rotate-45 top-3" : "top-1"}`} />
+                  <span className={`absolute h-0.5 w-6 bg-white transition duration-300 ${isOpen ? "opacity-0" : "top-3"}`} />
+                  <span className={`absolute h-0.5 w-6 bg-white transform transition duration-300 ${isOpen ? "-rotate-45 top-3" : "top-5"}`} />
                 </div>
               </button>
             </div>
@@ -542,7 +513,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
             {/* Divider */}
             <div className="my-2 h-px bg-black/10" />
 
-            {isAuthed ? (
+            {authed ? (
               <>
                 <Link
                   href="/events"

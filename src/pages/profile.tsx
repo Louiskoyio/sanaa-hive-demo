@@ -7,6 +7,13 @@ import Page from "@/components/Page";
 /* ----------------------------- Types ----------------------------- */
 type Me = { id: number | string; username: string; email: string; is_creator: boolean };
 
+type SocialLinks = {
+  x?: string;
+  tiktok?: string;
+  instagram?: string;
+  facebook?: string;
+};
+
 type Creative = {
   display_name: string;
   category?: string;
@@ -17,6 +24,7 @@ type Creative = {
   avatar_url: string;
   verified: boolean;
   tags: string[];
+  social_links?: SocialLinks | null; // 👈 added
 };
 
 type EventItem = {
@@ -30,6 +38,37 @@ type EventItem = {
 
 const images_url = (process.env.NEXT_PUBLIC_MEDIA_BASE || "http://localhost:8000").replace(/\/+$/, "");
 const AVATAR_UPLOAD_URL = "/api/profile/avatar/"; // dedicated avatar endpoint
+
+/* ----------------------------- Utils ----------------------------- */
+function cleanHandle(v?: string | null): string {
+  const raw = (v || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      const last = u.pathname.split("/").filter(Boolean).pop() || "";
+      return last.replace(/^@+/, "").split(/[?#]/)[0];
+    } catch {
+      // fallthrough
+    }
+  }
+  return raw.replace(/^@+/, "").split(/[?#]/)[0];
+}
+
+function buildSocialUrls(s?: SocialLinks | null) {
+  const h = {
+    x: cleanHandle(s?.x),
+    tiktok: cleanHandle(s?.tiktok),
+    instagram: cleanHandle(s?.instagram),
+    facebook: cleanHandle(s?.facebook),
+  };
+  return {
+    x: h.x ? `https://x.com/${h.x}` : "",
+    tiktok: h.tiktok ? `https://www.tiktok.com/@${h.tiktok}` : "",
+    instagram: h.instagram ? `https://instagram.com/${h.instagram}` : "",
+    facebook: h.facebook ? `https://facebook.com/${h.facebook}` : "",
+  };
+}
 
 /* ----------------------------- Page ----------------------------- */
 export default function MyProfilePage() {
@@ -125,6 +164,10 @@ export default function MyProfilePage() {
     if (/^(https?:)?\/\//i.test(v) || /^data:/i.test(v)) return v;
     return `${images_url}/${v.replace(/^\/+/, "")}`;
   }, [avatar_url]);
+
+  // ✅ Build social URLs from handles (only non-empty ones will render)
+  const socialUrls = useMemo(() => buildSocialUrls(creative?.social_links), [creative?.social_links]);
+  const hasAnySocial = !!(socialUrls.x || socialUrls.tiktok || socialUrls.instagram || socialUrls.facebook);
 
   /* ------------------------ Avatar Handlers ------------------------ */
   function openAvatarModal() {
@@ -360,6 +403,35 @@ export default function MyProfilePage() {
                     )}
                   </li>
                 </ul>
+
+                {/* 👇 Social icons row */}
+                {hasAnySocial && (
+                  <>
+                    <h5 className="mt-4 text-sm font-semibold text-gray-900">Social</h5>
+                    <div className="mt-2 flex items-center gap-3">
+                      {socialUrls.x && (
+                        <a href={socialUrls.x} target="_blank" rel="noreferrer" title="X" aria-label="X">
+                          <img src="/x.png" className="h-6 w-6 opacity-90 hover:opacity-100" alt="X" />
+                        </a>
+                      )}
+                      {socialUrls.tiktok && (
+                        <a href={socialUrls.tiktok} target="_blank" rel="noreferrer" title="TikTok" aria-label="TikTok">
+                          <img src="/tiktok.png" className="h-6 w-6 opacity-90 hover:opacity-100" alt="TikTok" />
+                        </a>
+                      )}
+                      {socialUrls.instagram && (
+                        <a href={socialUrls.instagram} target="_blank" rel="noreferrer" title="Instagram" aria-label="Instagram">
+                          <img src="/instagram.png" className="h-6 w-6 opacity-90 hover:opacity-100" alt="Instagram" />
+                        </a>
+                      )}
+                      {socialUrls.facebook && (
+                        <a href={socialUrls.facebook} target="_blank" rel="noreferrer" title="Facebook" aria-label="Facebook">
+                          <img src="/facebook.png" className="h-6 w-6 opacity-90 hover:opacity-100" alt="Facebook" />
+                        </a>
+                      )}
+                    </div>
+                  </>
+                )}
               </aside>
             </div>
           )}

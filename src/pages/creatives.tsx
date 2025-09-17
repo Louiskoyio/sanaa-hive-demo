@@ -15,6 +15,7 @@ type CreativeAPI = {
   avatar_url?: string;
   verified?: boolean;
   tags?: string[];
+  // suspended?: boolean; // (optional — not used on FE, we filter via query)
 };
 
 // ---- Card adapter type
@@ -51,7 +52,7 @@ export default function Creatives() {
   const [items, setItems] = useState<CreativeItem[]>([]);
   const [cats, setCats] = useState<string[]>(["All"]); // dynamic chips
 
-  // Fetch creatives from backend
+  // Fetch creatives from backend (ONLY non-suspended)
   useEffect(() => {
     let mounted = true;
 
@@ -63,7 +64,8 @@ export default function Creatives() {
         const apiBase = (process.env.NEXT_PUBLIC_DJANGO_API_BASE || "").replace(/\/+$/, "");
         if (!apiBase) throw new Error("Missing NEXT_PUBLIC_DJANGO_API_BASE");
 
-        const r = await fetch(`${apiBase}/api/creatives/`, { cache: "no-store" });
+        // 👇 Filter on the server: only profiles where suspended=false
+        const r = await fetch(`${apiBase}/api/creatives/?suspended=false`, { cache: "no-store" });
         const body = await r.json();
         if (!r.ok) throw new Error(body?.detail || "Failed to load creatives");
 
@@ -156,15 +158,15 @@ export default function Creatives() {
         <div className="flex flex-wrap gap-2 mb-6">
           {cats.map((c) => (
             <button
-            key={c}
-            onClick={() => setCat(c)}
-            className={`px-3 py-1.5 rounded-full border border-transparent text-sm font-semibold text-white transform-gpu transition-transform duration-150 ${
+              key={c}
+              onClick={() => setCat(c)}
+              className={`px-3 py-1.5 rounded-full border border-transparent text-sm font-semibold text-white transform-gpu transition-transform duration-150 ${
                 cat === c
-                ? "bg-royal-purple hover:scale-105"
-                : "bg-sanaa-orange hover:bg-gradient-to-r from-royal-purple/90 via-royal-purple/50 to-sanaa-orange/90 hover:scale-105"
-            }`}
+                  ? "bg-royal-purple hover:scale-105"
+                  : "bg-sanaa-orange hover:bg-gradient-to-r from-royal-purple/90 via-royal-purple/50 to-sanaa-orange/90 hover:scale-105"
+              }`}
             >
-            {c}
+              {c}
             </button>
           ))}
         </div>

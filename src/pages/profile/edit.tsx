@@ -3,16 +3,25 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import Page from "@/components/Page";
 
+type SocialLinks = {
+  x?: string;
+  tiktok?: string;
+  instagram?: string;
+  facebook?: string;
+};
+
 type Creative = {
   display_name: string;
   category?: string | null;
   subcategory?: string | null;
-  location: string;
-  bio: string;
-  website: string;
+  location: string | null;
+  bio: string | null;
+  website: string | null;
   avatar_url: string | null;
   verified: boolean;
-  tags: string[];
+  // suspended?: boolean; // available on backend, but we don't edit here
+  tags: string[] | null;
+  social_links?: SocialLinks | null;
 };
 
 /* ------------------------- CategorySelect ------------------------- */
@@ -107,9 +116,9 @@ function CategorySelect({
                 aria-selected={selected}
                 onMouseEnter={() => setActiveIndex(i)}
                 onClick={() => { onChange(opt); setOpen(false); btnRef.current?.focus(); }}
-                className={`w-full text-left px-4 py-2.5 text-sm transition ${
-                  active ? "bg-gray-50" : "bg-transparent"
-                } ${selected ? "font-semibold text-gray-900" : "text-gray-800"}`}
+                className={`w-full text-left px-4 py-2.5 text-sm transition ${active ? "bg-gray-50" : "bg-transparent"} ${
+                  selected ? "font-semibold text-gray-900" : "text-gray-800"
+                }`}
               >
                 {opt}
               </button>
@@ -179,9 +188,71 @@ function TagInput({
         />
       </div>
       <div className="mt-1 text-[11px] text-gray-500">
-        Separate with <span className="font-medium text-royal-purple">Space</span> or{" "}
-        <span className="font-medium text-royal-purple">Enter</span>. Up to {maxTags} tags.
+        Separate with <span className="font-medium text-royal-purple">Space</span>{" "}
+        or <span className="font-medium text-royal-purple">Enter</span>. Up to {maxTags} tags.
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------ SocialHandles ------------------------------ */
+function normalizeHandle(raw?: string | null): string {
+  const v = (raw || "").trim();
+  if (!v) return "";
+  // If full URL, take last path segment
+  if (/^https?:\/\//i.test(v)) {
+    try {
+      const u = new URL(v);
+      const last = u.pathname.split("/").filter(Boolean).pop() || "";
+      return last.replace(/^@+/, "");
+    } catch {
+      // fall-through
+    }
+  }
+  return v.replace(/^@+/, "").split(/[?#]/)[0];
+}
+
+function SocialHandles({
+  value,
+  onChange,
+}: {
+  value: SocialLinks;
+  onChange: (next: SocialLinks) => void;
+}) {
+  const Row = ({
+    label, name, icon, placeholder, prefixAt = true,
+  }: {
+    label: string;
+    name: keyof SocialLinks;
+    icon: string;
+    placeholder: string;
+    prefixAt?: boolean;
+  }) => (
+    <div className="flex items-center gap-3">
+      <img src={icon} alt={`${label} icon`} className="w-5 h-5 opacity-80" />
+      <div className="flex-1">
+        <label className="block text-sm font-medium text-gray-700">{label}</label>
+        <div className="mt-1 flex items-center rounded-md border border-black/10 focus-within:ring-2 focus-within:ring-royal-purple/60 bg-white">
+          {prefixAt && <span className="pl-3 pr-1 text-gray-500">@</span>}
+          <input
+            value={value[name] || ""}
+            onChange={(e) => onChange({ ...value, [name]: normalizeHandle(e.target.value) })}
+            placeholder={placeholder}
+            className="flex-1 px-2 py-2 rounded-r-md focus:outline-none bg-transparent"
+          />
+        </div>
+        <p className="mt-1 text-[11px] text-gray-500">Paste a profile URL or handle; we’ll clean it.</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-medium text-gray-700">Social handles</h3>
+      <Row label="X"         name="x"         icon="/x.png"          placeholder="yourhandle" />
+      <Row label="TikTok"    name="tiktok"    icon="/tiktok.png"     placeholder="yourhandle" />
+      <Row label="Instagram" name="instagram" icon="/instagram.png"  placeholder="yourhandle" />
+      <Row label="Facebook"  name="facebook"  icon="/facebook.png"   placeholder="yourhandle" />
     </div>
   );
 }
@@ -203,9 +274,9 @@ export default function EditProfilePage() {
   const [subcategory, setSubcategory] = useState("");
   const [website, setWebsite] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [serverAvatar, setServerAvatar] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string>(""); // backend stores URL string
+
+  const [socialLinks, setSocialLinks] = useState<SocialLinks>({ x: "", tiktok: "", instagram: "", facebook: "" });
 
   // load current profile (no-cache)
   useEffect(() => {
@@ -214,8 +285,7 @@ export default function EditProfilePage() {
       try {
         setErr(null);
         setLoading(true);
-        // NOTE: this assumes you have a Next.js API route that proxies to Django
-        const r = await fetch("/api/me/profile", { cache: "no-store" });
+        const r = await fetch("/api/me/profile", { cache: "no-store", credentials: "include" });
         if (r.status === 401) { router.replace("/login"); return; }
         const j: Creative = await r.json();
         if (!r.ok) throw new Error((j as any)?.error || "Failed to load profile");
@@ -228,7 +298,15 @@ export default function EditProfilePage() {
         setTags(Array.isArray(j.tags) ? j.tags : []);
         setCategory(j.category || "");
         setSubcategory(j.subcategory || "");
-        setServerAvatar(j.avatar_url || null);
+        setAvatarUrl(j.avatar_url || "");
+
+        const s = j.social_links || {};
+        setSocialLinks({
+          x: normalizeHandle(s.x),
+          tiktok: normalizeHandle(s.tiktok),
+          instagram: normalizeHandle(s.instagram),
+          facebook: normalizeHandle(s.facebook),
+        });
       } catch (e: any) {
         if (mounted) setErr(e?.message || "Failed to load profile");
       } finally {
@@ -237,14 +315,6 @@ export default function EditProfilePage() {
     })();
     return () => { mounted = false; };
   }, [router]);
-
-  // avatar preview
-  useEffect(() => {
-    if (!avatarFile) { setAvatarPreview(null); return; }
-    const url = URL.createObjectURL(avatarFile);
-    setAvatarPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [avatarFile]);
 
   const canSubmit = useMemo(() => !loading && !saving, [loading, saving]);
 
@@ -255,57 +325,42 @@ export default function EditProfilePage() {
     setErr(null);
     setSaving(true);
     try {
-      let r: Response;
+      const payload = {
+        display_name,
+        location,
+        bio,
+        website,
+        category,
+        subcategory,
+        avatar_url: avatarUrl || null,
+        tags, // JSON list
+        social_links: {
+          x: socialLinks.x || "",
+          tiktok: socialLinks.tiktok || "",
+          instagram: socialLinks.instagram || "",
+          facebook: socialLinks.facebook || "",
+        },
+      };
 
-      if (avatarFile) {
-        // multipart PATCH (correct key is "avatar")
-        const fd = new FormData();
-        fd.append("display_name", display_name);
-        if (location) fd.append("location", location);
-        if (category) fd.append("category", category);
-        if (subcategory) fd.append("subcategory", subcategory);
-        if (bio) fd.append("bio", bio);
-        if (website) fd.append("website", website);
-        if (tags.length) fd.append("tags", JSON.stringify(tags));
-        fd.append("avatar", avatarFile, avatarFile.name);
+      const r = await fetch("/api/me/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+        credentials: "include",
+      });
 
-        r = await fetch("/api/me/profile", {
-          method: "PATCH",
-          body: fd,              // let the browser set multipart boundary
-          cache: "no-store",
-        });
-      } else {
-        // JSON PATCH
-        r = await fetch("/api/me/profile", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            display_name,
-            location,
-            bio,
-            website,
-            category,
-            subcategory,
-            tags,                 // array is fine; backend accepts list or JSON string
-          }),
-          cache: "no-store",
-        });
-      }
-
+      // Try to parse JSON either way to surface backend errors nicely
       const j = await r.json().catch(() => ({}));
       if (r.status === 401) { router.replace("/login"); return; }
       if (!r.ok) {
-        // show field errors if any
-        if (j && typeof j === "object") throw new Error(j.detail || j.error || JSON.stringify(j));
-        throw new Error("Update failed");
+        const msg =
+          (j && (j.detail || j.error)) ||
+          (typeof j === "object" ? JSON.stringify(j) : "Update failed");
+        throw new Error(msg);
       }
 
-      // update UI immediately with server's latest avatar url if returned
-      if (j?.avatar_url) setServerAvatar(j.avatar_url);
-      setAvatarFile(null);
-      setAvatarPreview(null);
-
-      // go back to profile page (or comment this out to stay)
+      if ((j as any)?.avatar_url) setAvatarUrl((j as any).avatar_url);
       router.replace("/profile");
     } catch (e: any) {
       setErr(e?.message || "Update failed");
@@ -321,35 +376,26 @@ export default function EditProfilePage() {
         <p className="text-sm text-gray-600">Update your public profile details.</p>
 
         <form onSubmit={onSubmit} className="mt-6 bg-white rounded-xl shadow p-6 space-y-6" noValidate>
-          {/* Avatar 
+          {/* Avatar URL (backend uses avatar_url string here) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Profile picture</label>
-            <label
-              className="mt-2 flex items-center gap-4 p-4 rounded-xl border-2 border-dashed cursor-pointer hover:bg-gray-50"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.[0]) setAvatarFile(e.dataTransfer.files[0]); }}
-            >
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
-              />
+            <label className="block text-sm font-medium text-gray-700">Profile picture URL</label>
+            <input
+              value={avatarUrl || ""}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="https://cdn.example.com/your-avatar.jpg"
+              className="mt-1 w-full rounded-md border border-black/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple/60"
+            />
+            <div className="mt-2">
               <div className="h-16 w-16 rounded-full overflow-hidden bg-gray-100 grid place-items-center">
-                {avatarPreview ? (
-                  <img src={avatarPreview} alt="New preview" className="w-full h-full object-cover" />
-                ) : serverAvatar ? (
-                  <img src={serverAvatar} alt="Current avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <img src="/user.png" alt="Default avatar" className="w-full h-full object-cover" />
-                )}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={avatarUrl || "/user.png"}
+                  alt="Avatar preview"
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <div className="text-sm text-gray-700">
-                <div className="font-medium">Upload or drop an image</div>
-                <div className="text-gray-500">PNG/JPG up to ~2MB recommended</div>
-              </div>
-            </label>
-          </div>*/}
+            </div>
+          </div>
 
           {/* Display name */}
           <div>
@@ -359,6 +405,7 @@ export default function EditProfilePage() {
               onChange={(e) => setDisplayName(e.target.value)}
               className="mt-1 w-full rounded-md border border-black/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple/60"
               placeholder="Your stage or brand name"
+              required
             />
           </div>
 
@@ -382,7 +429,7 @@ export default function EditProfilePage() {
               Location <span className="text-xs text-gray-500">(City, Country)</span>
             </label>
             <input
-              value={location}
+              value={location || ""}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="Nairobi, Kenya"
               className="mt-1 w-full rounded-md border border-black/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple/60"
@@ -393,7 +440,7 @@ export default function EditProfilePage() {
           <div>
             <label className="block text-sm font-medium text-gray-700">Website</label>
             <input
-              value={website}
+              value={website || ""}
               onChange={(e) => setWebsite(e.target.value)}
               placeholder="https://example.com"
               className="mt-1 w-full rounded-md border border-black/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-royal-purple/60"
@@ -404,7 +451,7 @@ export default function EditProfilePage() {
           <div>
             <label className="block text-sm font-medium text-gray-700">Bio</label>
             <textarea
-              value={bio}
+              value={bio || ""}
               onChange={(e) => setBio(e.target.value)}
               rows={4}
               placeholder="Tell us about your creative practice…"
@@ -414,6 +461,9 @@ export default function EditProfilePage() {
 
           {/* Tags */}
           <TagInput value={tags} onChange={setTags} />
+
+          {/* Social handles */}
+          <SocialHandles value={socialLinks} onChange={setSocialLinks} />
 
           {/* Errors */}
           {err && (

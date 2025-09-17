@@ -4,6 +4,13 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Page from "@/components/Page";
 
+type SocialLinks = {
+  x?: string;
+  tiktok?: string;
+  instagram?: string;
+  facebook?: string;
+};
+
 type Creative = {
   display_name: string;
   category?: string;
@@ -14,6 +21,7 @@ type Creative = {
   avatar_url?: string;
   verified?: boolean;
   tags?: string[];
+  social_links?: SocialLinks | null; // 👈 added
 };
 
 type EventItem = {
@@ -31,16 +39,13 @@ const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE || API_BASE).replace(/\/+
 async function fetchJsonSafe(url: string, init?: RequestInit) {
   const r = await fetch(url, { ...init, headers: { Accept: "application/json", ...(init?.headers || {}) } });
   const ct = r.headers.get("content-type") || "";
-  // If it's not JSON, try to read text and throw a readable error
   if (!ct.includes("application/json")) {
     const text = await r.text().catch(() => "");
     const msg = text?.slice(0, 200) || `Unexpected response (${r.status})`;
     throw new Error(msg);
   }
   const j = await r.json();
-  if (!r.ok) {
-    throw new Error(typeof j?.detail === "string" ? j.detail : j?.error || `HTTP ${r.status}`);
-  }
+  if (!r.ok) throw new Error(typeof j?.detail === "string" ? j.detail : j?.error || `HTTP ${r.status}`);
   return j;
 }
 
@@ -52,6 +57,37 @@ function VerifiedBadge() {
       <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-royal-purple text-white">Verified</span>
     </span>
   );
+}
+
+/* ----------------------------- Social helpers ----------------------------- */
+function cleanHandle(v?: string | null): string {
+  const raw = (v || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      const last = u.pathname.split("/").filter(Boolean).pop() || "";
+      return last.replace(/^@+/, "").split(/[?#]/)[0];
+    } catch {
+      // fallthrough
+    }
+  }
+  return raw.replace(/^@+/, "").split(/[?#]/)[0];
+}
+
+function buildSocialUrls(s?: SocialLinks | null) {
+  const h = {
+    x: cleanHandle(s?.x),
+    tiktok: cleanHandle(s?.tiktok),
+    instagram: cleanHandle(s?.instagram),
+    facebook: cleanHandle(s?.facebook),
+  };
+  return {
+    x: h.x ? `https://x.com/${h.x}` : "",
+    tiktok: h.tiktok ? `https://www.tiktok.com/@${h.tiktok}` : "",
+    instagram: h.instagram ? `https://instagram.com/${h.instagram}` : "",
+    facebook: h.facebook ? `https://facebook.com/${h.facebook}` : "",
+  };
 }
 
 export default function PublicCreativeProfile() {
@@ -75,7 +111,6 @@ export default function PublicCreativeProfile() {
       try {
         setErr(null);
         setLoading(true);
-        // Creative detail (public)
         const data = await fetchJsonSafe(`${API_BASE}/api/creatives/${encodeURIComponent(slug)}/`);
         if (!mounted) return;
         setCreative(data);
@@ -117,7 +152,7 @@ export default function PublicCreativeProfile() {
   const avatarSrc = (() => {
     const v = (creative?.avatar_url || "").trim();
     if (!v) return "/user.png";
-    if (/^(https?:)?\/\//i.test(v) || /^data:/i.test(v)) return v; // Cloudinary absolute URL or data URL
+    if (/^(https?:)?\/\//i.test(v) || /^data:/i.test(v)) return v;
     return `${MEDIA_BASE}/${v.replace(/^\/+/, "")}`;
   })();
 
@@ -135,6 +170,10 @@ export default function PublicCreativeProfile() {
       return iso || "";
     }
   };
+
+  // ✅ Socials for sidebar
+  const socialUrls = useMemo(() => buildSocialUrls(creative?.social_links), [creative?.social_links]);
+  const hasAnySocial = !!(socialUrls.x || socialUrls.tiktok || socialUrls.instagram || socialUrls.facebook);
 
   return (
     <Page>
@@ -240,6 +279,35 @@ export default function PublicCreativeProfile() {
                     )}
                   </li>
                 </ul>
+
+                {/* 👇 Social icons row */}
+                {hasAnySocial && (
+                  <>
+                    <h5 className="mt-4 text-sm font-semibold text-gray-900">Social</h5>
+                    <div className="mt-2 flex items-center gap-3">
+                      {socialUrls.x && (
+                        <a href={socialUrls.x} target="_blank" rel="noreferrer" title="X" aria-label="X">
+                          <img src="/x.png" className="h-6 w-6 opacity-90 hover:opacity-100" alt="X" />
+                        </a>
+                      )}
+                      {socialUrls.tiktok && (
+                        <a href={socialUrls.tiktok} target="_blank" rel="noreferrer" title="TikTok" aria-label="TikTok">
+                          <img src="/tiktok.png" className="h-6 w-6 opacity-90 hover:opacity-100" alt="TikTok" />
+                        </a>
+                      )}
+                      {socialUrls.instagram && (
+                        <a href={socialUrls.instagram} target="_blank" rel="noreferrer" title="Instagram" aria-label="Instagram">
+                          <img src="/instagram.png" className="h-6 w-6 opacity-90 hover:opacity-100" alt="Instagram" />
+                        </a>
+                      )}
+                      {socialUrls.facebook && (
+                        <a href={socialUrls.facebook} target="_blank" rel="noreferrer" title="Facebook" aria-label="Facebook">
+                          <img src="/facebook.png" className="h-6 w-6 opacity-90 hover:opacity-100" alt="Facebook" />
+                        </a>
+                      )}
+                    </div>
+                  </>
+                )}
               </aside>
             </div>
           )}
