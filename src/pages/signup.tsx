@@ -262,6 +262,14 @@ const STEPS: { id: StepKey; label: string }[] = [
 // ---- choose your auth mode ----
 const AUTH_MODE: "jwt" | "session" = "jwt"; // default JWT to avoid CSRF hassles
 
+// ensure website has protocol for URLField in DRF
+function normalizeWebsite(raw: string): string {
+  const v = (raw || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v)) return v;
+  return `https://${v}`;
+}
+
 export default function SignUp() {
   const router = useRouter();
 
@@ -315,10 +323,7 @@ export default function SignUp() {
   const websiteValid = useMemo(() => {
     if (!form.website) return true;
     try {
-      const withProto = form.website.startsWith("http")
-        ? form.website
-        : `https://${form.website}`;
-      const u = new URL(withProto);
+      const u = new URL(normalizeWebsite(form.website));
       return Boolean(u.hostname);
     } catch {
       return false;
@@ -411,71 +416,97 @@ export default function SignUp() {
     const PROFILE = `${DJ}/api/me/creative-profile/`;
 
     try {
-    setSubmitting(true);
-    setErrMsg(null);
+      setSubmitting(true);
+      setErrMsg(null);
 
-    // 1) REGISTER
-    const regFd = new FormData();
-    regFd.append("name", form.name);
-    regFd.append("email", form.email);
-    regFd.append("password", form.password);
+      // 1) REGISTER
+      const regFd = new FormData();
+      regFd.append("name", form.name);
+      regFd.append("email", form.email);
+      regFd.append("password", form.password);
 
-    const regRes = await fetch(REGISTER, { method: "POST", body: regFd });
-    const regData = await regRes.json().catch(() => ({}));
-    if (!regRes.ok) {
+      const regRes = await fetch(REGISTER, { method: "POST", body: regFd });
+      const regData = await regRes.json().catch(() => ({}));
+      if (!regRes.ok) {
         throw new Error(regData?.detail || regData?.error || "Signup failed");
-    }
+      }
 
-    // 2) AUTHENTICATE (SimpleJWT expects username by default)
-    //    use the username returned by the register endpoint
-    const loginUsername = regData?.username;
-    if (!loginUsername) {
-        // fallback: try deriving from email if needed (optional)
-        // const base = form.email.split("@")[0].replace(/\./g, "_");
-        // loginUsername = base;
+      // 2) AUTHENTICATE (SimpleJWT expects username by default)
+      const loginUsername = regData?.username;
+      if (!loginUsername) {
         throw new Error("No username returned from register; cannot obtain token.");
-    }
+      }
 
-    const tokenRes = await fetch(TOKEN_OBTAIN, {
+      const tokenRes = await fetch(TOKEN_OBTAIN, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ username: loginUsername, password: form.password }),
-    });
-    const tokenData = await tokenRes.json().catch(() => ({}));
-    if (!tokenRes.ok || !tokenData?.access) {
+      });
+      const tokenData = await tokenRes.json().catch(() => ({}));
+      if (!tokenRes.ok || !tokenData?.access) {
         throw new Error(tokenData?.detail || "Could not obtain JWT");
-    }
-    const authHeaders: Record<string, string> = {
+      }
+      const authHeaders: Record<string, string> = {
         Authorization: `Bearer ${tokenData.access}`,
-    };
+        Accept: "application/json",
+      };
 
-    // 3) PATCH PROFILE
-    const profFd = new FormData();
-    profFd.append("display_name", form.name);
-    profFd.append("category", form.category);
-    if (form.subcategory) profFd.append("subcategory", form.subcategory);
-    if (form.location) profFd.append("location", form.location);
-    if (form.website) profFd.append("website", form.website);
-    if (form.bio) profFd.append("bio", form.bio);
-    if (form.tags.length) profFd.append("tags", JSON.stringify(form.tags));
-    if (form.profileFile) profFd.append("avatar", form.profileFile, form.profileFile.name);
+      // 3) PATCH PROFILE
+      // Send JSON when there is no file (avoids multipart quirks); use multipart only if avatar is present.
+      const hasFile = Boolean(form.profileFile);
 
-    const profRes = await fetch(PROFILE, {
-        method: "PATCH",
-        headers: authHeaders,
-        body: profFd,
-    });
-    const profData = await profRes.json().catch(() => ({}));
-    if (!profRes.ok) {
-        throw new Error(profData?.detail || "Could not save profile");
-    }
+      if (hasFile) {
+        const fd = new FormData();
+        // texts MUST be strings in multipart to satisfy DRF model fields
+        fd.append("display_name", String(form.name || ""));
+        fd.append("category", String(form.category || ""));
+        if (form.subcategory) fd.append("subcategory", String(form.subcategory));
+        if (form.location) fd.append("location", String(form.location));
+        if (form.website) fd.append("website", normalizeWebsite(form.website));
+        if (form.bio) fd.append("bio", String(form.bio));
+        if (form.tags.length) fd.append("tags", JSON.stringify(form.tags));
+        // file
+        if (form.profileFile) fd.append("avatar", form.profileFile, form.profileFile.name);
 
-    setShowSuccess(true);
+        const profRes = await fetch(PROFILE, {
+          method: "PATCH",
+          headers: authHeaders, // DO NOT set Content-Type — the browser will set multipart boundary
+          body: fd,
+        });
+        const profData = await profRes.json().catch(() => ({}));
+        if (!profRes.ok) {
+          throw new Error(profData?.detail || JSON.stringify(profData) || "Could not save profile");
+        }
+      } else {
+        // Clean JSON payload (all strings)
+        const payload = {
+          display_name: String(form.name || ""),
+          category: String(form.category || ""),
+          subcategory: form.subcategory ? String(form.subcategory) : undefined,
+          location: form.location ? String(form.location) : undefined,
+          website: form.website ? normalizeWebsite(form.website) : undefined,
+          bio: form.bio ? String(form.bio) : undefined,
+          // tags: array is fine in JSON; serializer handles list or JSON string
+          tags: form.tags,
+        };
+
+        const profRes = await fetch(PROFILE, {
+          method: "PATCH",
+          headers: { ...authHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const profData = await profRes.json().catch(() => ({}));
+        if (!profRes.ok) {
+          throw new Error(profData?.detail || JSON.stringify(profData) || "Could not save profile");
+        }
+      }
+
+      setShowSuccess(true);
     } catch (err: any) {
-    setErrMsg(err?.message || "Signup failed");
-    alert(err?.message || "Signup failed");
+      setErrMsg(err?.message || "Signup failed");
+      alert(err?.message || "Signup failed");
     } finally {
-    setSubmitting(false);
+      setSubmitting(false);
     }
   }
 
