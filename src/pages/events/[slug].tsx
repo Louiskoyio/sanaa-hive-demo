@@ -280,20 +280,20 @@ export default function EventProfile({ event }: Props) {
                     const qty = qtyByTier[t.id] || 1;
                     const soldOut = t.available <= 0;
                     return (
-                      <div key={t.id} className="rounded-xl border bg-white p-4">
+                      <div key={t.id} className="rounded-xl border bg-royal-purple shadow p-4">
                         <div className="flex items-center justify-between">
-                          <div className="text-base font-semibold">{t.label}</div>
+                          <div className="text-white font-semibold">{t.label}</div>
                           <div className="text-sm">
                             {t.price === 0 ? "Free" : `KES ${t.price.toLocaleString()}`}
                           </div>
                         </div>
 
-                        <div className="mt-2 text-xs text-gray-600">
+                        <div className="mt-2 text-xs text-white">
                           {soldOut ? "Sold out" : `${t.available} left`}
                         </div>
 
                         <div className="mt-3">
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
+                          <label className="block text-xs font-medium text-white mb-1">Quantity</label>
                           <QtyStepper
                             value={qty}
                             min={1}
