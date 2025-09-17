@@ -283,7 +283,7 @@ export default function EventProfile({ event }: Props) {
                       <div key={t.id} className="rounded-xl border bg-royal-purple shadow p-4">
                         <div className="flex items-center justify-between">
                           <div className="text-white font-semibold">{t.label}</div>
-                          <div className="text-sm">
+                          <div className="text-sm text-white">
                             {t.price === 0 ? "Free" : `KES ${t.price.toLocaleString()}`}
                           </div>
                         </div>
@@ -293,7 +293,6 @@ export default function EventProfile({ event }: Props) {
                         </div>
 
                         <div className="mt-3">
-                          <label className="block text-xs font-medium text-white mb-1">Quantity</label>
                           <QtyStepper
                             value={qty}
                             min={1}
