@@ -91,16 +91,16 @@ export default function Footer() {
             ["About", "/about"],
             ["Contact Us", "/contact-us"],
           ]} />
-          <FooterCol title="HELP" links={[
-            ["Customer Support", "/support"],
-            ["Check Ticket Details", "/delivery"],
+          <FooterCol title="LINKS" links={[
+            ["Creatives", "/creatives"],
+            ["Events", "/events"],
             ["Terms & Conditions", "/terms"],
             ["Privacy Policy", "/privacy"],
           ]} />
           <FooterCol title="FAQ" links={[
             ["Account", "/account"],
-            ["Orders", "/orders"],
-            ["Payments", "/payments"],
+            ["Register as a creative", "/signup"],
+            ["Buy Event Tickets", "/events"],
           ]} />
         </div>
 
