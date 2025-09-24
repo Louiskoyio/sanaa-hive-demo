@@ -50,7 +50,7 @@ export default function EventCard({
   price,
   ticketUrl,
   onBuy,
-  ctaLabel = "Buy Ticket",
+  ctaLabel = "Get Ticket",
   badge,
   slug,
   organizerName,   // NEW
@@ -93,7 +93,7 @@ export default function EventCard({
         <div className="md:col-span-3 p-4 md:p-6 flex flex-col h-full">
           {/* Title + Price row */}
           <div className="flex items-start justify-between gap-4">
-            <h4 className="text-lg md:text-xl font-semibold text-sanaa-orange">
+            <h4 className="text-lg md:text-xl font-semibold text-blacks">
               {title}
             </h4>
             {price && (
@@ -108,7 +108,7 @@ export default function EventCard({
             <div className="mt-1 text-xs text-gray-600">
               by{" "}
               {organizerUrl ? (
-                <Link href={organizerUrl} className="text-sanaa-orange hover:underline">
+                <Link href={organizerUrl} className="text-black hover:underline">
                   {organizerName}
                 </Link>
               ) : (

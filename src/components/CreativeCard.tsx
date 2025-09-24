@@ -1,15 +1,16 @@
+// components/CreativeCard.tsx
 import Link from "next/link";
 import { useState } from "react";
 
 type CreativeCardProps = {
   stageName: string;
   category: string;
-  verified?: boolean;          // default false
-  profileUrl?: string;         // if provided, the CTA is a link
-  onView?: () => void;         // click handler fallback
-  ctaLabel?: string;           // default "View Profile"
-  image?: string;              // optional profile/banner image
-  imageAlt?: string;           // optional alt text (defaults to stageName)
+  verified?: boolean;
+  profileUrl?: string;
+  onView?: () => void;
+  ctaLabel?: string;
+  image?: string;
+  imageAlt?: string;
 };
 
 function initials(name: string) {
@@ -35,62 +36,63 @@ export default function CreativeCard({
   const showImage = Boolean(image) && !imgError;
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden h-full">
-      {/* Top banner */}
-      <div className="relative w-full h-48 bg-white flex items-center justify-center">
-        {showImage ? (
-          <>
+    /* Thicker white bezel (no dark ring) */
+    <div className="rounded-3xl bg-white p-3 shadow-2xl">
+      {/* Inner card */}
+      <div className="group relative overflow-hidden rounded-[1.35rem] bg-zinc-900/60">
+        {/* Image / fallback */}
+        <div className="relative h-80 w-full md:h-96">
+          {showImage ? (
             <img
               src={image as string}
               alt={imageAlt || stageName}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
               onError={() => setImgError(true)}
             />
-            <div className="absolute inset-0 bg-black/0" />
-          </>
-        ) : (
-          <span className="text-white/95 text-5xl font-bold select-none">
-            {initials(stageName)}
-          </span>
-        )}
-
-        {/* Verified icon + chip (together) */}
-        {verified && (
-          <div className="absolute left-3 top-3 inline-flex items-center gap-0">
-            <img
-              src="/verified-badge.png"
-              alt="Verified"
-              className="h-8 w-8"
-            />
-            <span className="rounded-full bg-royal-purple text-white px-2 py-0.5 text-[11px] font-semibold">
-              Verified
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Body */}
-      <div className="p-4 flex flex-col h-full">
-        <h4 className="font-semibold text-sanaa-orange line-clamp-1">{stageName}</h4>
-
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <div className="text-sm text-gray-500 line-clamp-1">{category}</div>
-
-          {profileUrl ? (
-            <Link
-              href={profileUrl}
-              className="inline-flex items-center px-3 py-1.5 rounded-md bg-royal-purple text-white text-sm font-medium hover:bg-royal-purple/90 transition"
-            >
-              {ctaLabel}
-            </Link>
           ) : (
-            <button
-              onClick={onView}
-              className="inline-flex items-center px-3 py-1.5 rounded-md bg-royal-purple text-white text-sm font-medium hover:bg-royal-purple/90 transition"
-            >
-              {ctaLabel}
-            </button>
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-700">
+              <span className="select-none text-6xl font-bold text-white/90">
+                {initials(stageName)}
+              </span>
+            </div>
           )}
+
+          {/* Verified chip */}
+          {verified && (
+            <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-royal-purple/90 px-2 py-1 shadow">
+              <img src="/verified-badge.png" alt="Verified" className="h-4 w-4" />
+              <span className="text-xs font-semibold text-white">Verified</span>
+            </div>
+          )}
+
+          {/* Blackish blur/gradient overlay */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-white/80 via-white/40 to-transparent backdrop-blur-sm" />
+
+          {/* Content + CTA */}
+          <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <h4 className="truncate text-xl font-bold text-black drop-shadow-sm">
+                {stageName}
+              </h4>
+              <p className="truncate text-sm text-black/80">{category}</p>
+            </div>
+
+            {profileUrl ? (
+              <Link
+                href={profileUrl}
+                className="shrink-0 rounded-full bg-sanaa-orange px-4 py-2 text-sm font-medium text-white shadow hover:bg-sanaa-orange/80"
+              >
+                {ctaLabel}
+              </Link>
+            ) : (
+              <button
+                onClick={onView}
+                className="shrink-0 rounded-full bg-white px-4 py-2 text-sm font-medium text-gray-900 shadow hover:bg-zinc-100"
+              >
+                {ctaLabel}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

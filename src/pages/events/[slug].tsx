@@ -209,11 +209,6 @@ export default function EventProfile({ event }: Props) {
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">{event.title}</h1>
-              {event.badge && (
-                <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500 text-white">
-                  {event.badge}
-                </span>
-              )}
             </div>
             {event.description && <p className="mt-2 text-gray-700">{event.description}</p>}
 
@@ -296,7 +291,7 @@ export default function EventProfile({ event }: Props) {
                           <QtyStepper
                             value={qty}
                             min={1}
-                            max={Math.max(1, t.available)} // prevent exceeding availability
+                            max={Math.max(1, t.available)}
                             onChange={(n) =>
                               setQtyByTier((prev) => ({ ...prev, [t.id]: n }))
                             }
@@ -322,19 +317,21 @@ export default function EventProfile({ event }: Props) {
             </div>
           )}
 
+          {/* Photos tab — placeholder */}
           {tab === "photos" && (
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {[1, 2, 3].map((x) => (
-                <div key={x} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <img src={event.image} alt={event.title} className="w-full h-56 object-cover" />
-                </div>
-              ))}
+            <div className="mt-6">
+              <div className="rounded-lg border p-6 text-center text-gray-700">
+                No photos yet.
+              </div>
             </div>
           )}
 
+          {/* Updates tab — placeholder */}
           {tab === "updates" && (
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-              <div className="text-sm text-gray-600">No updates yet.</div>
+            <div className="mt-6">
+              <div className="rounded-lg border p-6 text-center text-gray-700">
+                No updates yet.
+              </div>
             </div>
           )}
         </div>

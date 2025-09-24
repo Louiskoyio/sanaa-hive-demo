@@ -1,13 +1,15 @@
 // pages/api/auth/login.ts
 import type { NextApiRequest, NextApiResponse } from "next";
 import { serialize } from "cookie";
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  cookieBase,
+} from "@/lib/auth"; // ← use the same constants as /api/me
 
-const DJANGO = process.env.DJANGO_API_BASE!; // e.g. http://127.0.0.1:8000
+const DJANGO = process.env.DJANGO_API_BASE!;
 const PROD = process.env.NODE_ENV === "production";
 
-const ACCESS_TOKEN_COOKIE = "accessToken";
-const REFRESH_TOKEN_COOKIE = "refreshToken";
-const cookieBase = { httpOnly: true, sameSite: "lax" as const, path: "/" };
 const maxAge = { access: 60 * 20, refresh: 60 * 60 * 24 * 7 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -17,7 +19,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { email, password, remember } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ error: "Missing email or password" });
 
-    // Our custom SimpleJWT view now accepts email (via 'username' field)
     const dj = await fetch(`${DJANGO}/api/auth/token/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -25,13 +26,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     const data = await dj.json().catch(() => ({} as any));
-
     if (!dj.ok || !data?.access || !data?.refresh) {
       return res.status(dj.status || 401).json({ error: data?.detail || "Invalid credentials" });
     }
 
-    // If you want "remember me" to shorten/extend the refresh lifetime locally:
-    const refreshAge = remember ? maxAge.refresh : 60 * 60 * 24 * 2; // e.g. 2 days when unchecked
+    const refreshAge = remember ? maxAge.refresh : 60 * 60 * 24 * 2;
 
     res.setHeader("Set-Cookie", [
       serialize(ACCESS_TOKEN_COOKIE, data.access, {
@@ -43,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ]);
 
     return res.status(200).json({ ok: true });
-  } catch (e) {
+  } catch {
     return res.status(500).json({ error: "Login API error" });
   }
 }

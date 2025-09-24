@@ -8,11 +8,8 @@ type Slide = {
 };
 
 const slides: Slide[] = [
-  { id: 1, image: "/assets/highlighted-events/highlighted-event-6.webp", title: "Open Mic Night", details: "Sat, 18 Oct — Groove Lounge" },
-  { id: 2, image: "/assets/highlighted-events/highlighted-event-7.webp", title: "Art Auction", details: "Fri, 24 Oct — Central Gallery" },
-  { id: 3, image: "/assets/highlighted-events/highlighted-event-8.jpg", title: "Creative Expo", details: "Sun, 02 Nov — Hall A" },
-  { id: 4, image: "/assets/highlighted-events/highlighted-event-9.webp", title: "Street Fashion", details: "Sat, 08 Nov — Plaza" },
-  { id: 5, image: "/assets/highlighted-events/highlighted-event-5.png", title: "Sanaa Talent Show", details: "Fri, 21 Nov — Riverside" },
+  { id: 1, image: "/assets/highlighted-events/highlighted-event-1.jpg", title: "AI for Creatives Community Fireside Chat", details: "Tue, 30 Sep — Hazina Trade Centre, Nairobi" },
+  
 ];
 
 export default function HeroSlider() {
@@ -40,9 +37,9 @@ export default function HeroSlider() {
 
           <div className="relative max-w-6xl mx-auto h-full px-6 lg:px-8 flex items-center">
             <div className="max-w-xl bg-white/80 p-6 rounded-md shadow-md">
-              <h2 className="text-3xl md:text-4xl font-bold text-royal-purple mb-2">{s.title}</h2>
+              <h2 className="text-3xl md:text-4xl font-bold text-black mb-2">{s.title}</h2>
               <p className="text-gray-700 mb-4">{s.details}</p>
-              <button className="px-4 py-2 rounded-md bg-sanaa-orange text-white">Buy Ticket</button>
+              <button className="px-4 py-2 rounded-md bg-sanaa-orange text-white">View Event</button>
             </div>
           </div>
         </div>

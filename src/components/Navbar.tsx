@@ -268,7 +268,7 @@ export default function Navbar({ user }: { user: SessionUser }) {
       <nav
         className={`fixed inset-x-0 top-0 z-50 transition-transform duration-300 ${
           show ? "translate-y-0" : "-translate-y-full"
-        } bg-gradient-to-r from-royal-purple/90 via-royal-purple/80 to-sanaa-orange/90 backdrop-blur-lg shadow`}
+        } bg-gradient-to-r from-royal-purple via-royal-purple/90 to-sanaa-orange/90 backdrop-blur-lg shadow`}
         style={{ height: "var(--nav-height, 64px)" }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

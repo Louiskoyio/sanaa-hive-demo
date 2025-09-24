@@ -30,34 +30,7 @@ export default function Home() {
     <Page>
       <HeroSlider />
 
-      <section className="max-w-6xl mx-auto px-4 py-12">
-        <h3 className="text-2xl font-semibold mb-6">Creatives</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-          {creatives.map((p) => (
-            <CreativeCard key={p.stageName} {...p} />
-          ))}
-        </div>
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 py-12">
-        <h3 className="text-2xl font-semibold mb-6">Art &amp; Merch</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-          {artAndMerch.map((p) => (
-            <ProductCard key={p.title} {...p} />
-          ))}
-        </div>
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 py-12 bg-gray-50">
-        <h3 className="text-2xl font-semibold mb-6">Top Selling</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {topSelling.map((p) => (
-            <ProductCard key={p.title} {...p} />
-          ))}
-        </div>
-      </section>
-
-      <CategoryGrid />
+ 
     </Page>
   );
 }
