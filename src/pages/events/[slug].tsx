@@ -425,7 +425,7 @@ export default function EventProfile({ event }: Props) {
               </div>
 
               <div className="mt-3">
-                <label className="block text-xs font-medium text-gray-600 mb-1">M-Pesa Phone Number</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
                 <div className="flex">
                   <span className="inline-flex items-center px-3 rounded-l-md border border-black/10 bg-gray-50 text-gray-700 select-none">
                     +254
@@ -444,7 +444,7 @@ export default function EventProfile({ event }: Props) {
                   />
                 </div>
                 <p id="phoneHelp" className="mt-1 text-xs text-gray-500">
-                  Enter the last 9 digits only (e.g., 712345678). We’ll send the STK push to {fullPhone}.
+                  Enter the last 9 digits only (e.g., 712345678). We’ll send updates to {fullPhone}.
                 </p>
                 {!phoneValid && phone9.length > 0 && (
                   <p className="mt-1 text-xs text-rose-600">Phone must be exactly 9 digits.</p>
