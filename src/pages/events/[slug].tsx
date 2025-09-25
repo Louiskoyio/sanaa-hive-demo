@@ -60,6 +60,10 @@ export default function EventProfile({ event }: Props) {
   const [selected, setSelected] = useState<Ticket | null>(null);
   const [showPayModal, setShowPayModal] = useState(false);
 
+  // success UI
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+
   // buyer form
   const [firstName, setFirstName] = useState("");
   const [lastName,  setLastName]  = useState("");
@@ -177,24 +181,35 @@ export default function EventProfile({ event }: Props) {
   function closePayModal() {
     setShowPayModal(false);
   }
-  function handleConfirmPay(e: React.FormEvent) {
+
+  // NEW: call RSVP endpoint (order only, pending status, no inventory ops)
+  async function handleConfirmPay(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit || !selected) return;
-    const payload = {
-      event: event.title,
-      ticket: selected.label,
-      qty: qtyByTier[selected.id] || 1,
-      total,
-      buyer: {
-        firstName: firstName || undefined,
-        lastName:  lastName  || undefined,
-        email:     email     || undefined,
-        phone:     fullPhone,
-      },
-    };
-    console.log("Submitting payment:", payload);
-    alert(`Mock payment\n${JSON.stringify(payload, null, 2)}`);
-    setShowPayModal(false);
+
+    try {
+      const r = await fetch(`${API_BASE}/api/events/${encodeURIComponent(event.slug)}/orders/rsvp/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          delivery_method: "email",
+          email,
+          phone: fullPhone,
+        }),
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err?.detail || "Failed to place order.");
+      }
+
+      const data = await r.json(); // serialized Order (id, status=pending, etc.)
+      setLastOrderId(data?.id || null);
+      setShowPayModal(false);
+      setShowSuccess(true);
+    } catch (err: any) {
+      alert(err?.message || "Order failed. Please try again.");
+    }
   }
 
   return (
@@ -343,7 +358,7 @@ export default function EventProfile({ event }: Props) {
           <div className="absolute inset-0 bg-black/50" onClick={closePayModal} aria-hidden="true" />
           <div className="relative z-10 w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">Confirm Payment</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Confirm RSVP</h3>
               <button onClick={closePayModal} aria-label="Close" className="rounded-full p-2 hover:bg-gray-100">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -455,6 +470,35 @@ export default function EventProfile({ event }: Props) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowSuccess(false)} aria-hidden="true" />
+          <div className="relative z-10 w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden">
+            <div className="px-5 py-6 text-center">
+              <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
+                <svg width="24" height="24" viewBox="0 0 24 24" className="text-green-600">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Order placed!</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                We’ve received your order{lastOrderId ? <> (<span className="font-mono">{String(lastOrderId).slice(0,8)}…</span>)</> : ""}. 
+                You’ll get your tickets via <span className="font-medium">email</span> at <span className="font-medium">{email || "your email"}</span>.
+              </p>
+              <div className="mt-5">
+                <button
+                  onClick={() => setShowSuccess(false)}
+                  className="px-4 py-2 rounded-md bg-sanaa-orange text-white hover:opacity-90"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
